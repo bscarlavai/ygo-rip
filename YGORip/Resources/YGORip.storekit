@@ -1,0 +1,64 @@
+{
+  "identifier" : "F9A3D2E1-4B6C-4F8A-9D7E-2C5A1B3E8F0D",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "1.99",
+      "familyShareable" : false,
+      "internalID" : "tip_support",
+      "localizations" : [
+        {
+          "description" : "Unlimited pack opens, premium animations, gyro holo effects.",
+          "displayName" : "Supporter",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.lavailabs.ygorip.tip.support",
+      "referenceName" : "Supporter",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "tip_super",
+      "localizations" : [
+        {
+          "description" : "Unlimited pack opens, premium animations, gyro holo effects.",
+          "displayName" : "Super Supporter",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.lavailabs.ygorip.tip.super",
+      "referenceName" : "Super Supporter",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "tip_legendary",
+      "localizations" : [
+        {
+          "description" : "Unlimited pack opens, premium animations, gyro holo effects.",
+          "displayName" : "Legendary Supporter",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.lavailabs.ygorip.tip.legendary",
+      "referenceName" : "Legendary Supporter",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "ygorip",
+    "_developerTeamID" : "84FW6HJMUP"
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

@@ -1,0 +1,67 @@
+name: YGORip
+options:
+  bundleIdPrefix: com.lavailabs
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: "84FW6HJMUP"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    ENABLE_USER_SCRIPT_SANDBOXING: true
+
+packages:
+  RevenueCat:
+    url: https://github.com/RevenueCat/purchases-ios-spm.git
+    from: "5.0.0"
+
+targets:
+  YGORip:
+    type: application
+    platform: iOS
+    dependencies:
+      - package: RevenueCat
+        product: RevenueCat
+    sources:
+      - path: YGORip
+        excludes:
+          - "**/.DS_Store"
+    resources:
+      - path: YGORip/Resources/Assets.xcassets
+      - path: YGORip/Resources/YGORip.storekit
+      # Folder reference: Xcode bundles the whole tree at build time without
+      # enumerating individual files at project-generation time. Important
+      # because the logo-scrape pipeline adds files to set-logos/ on its
+      # own schedule — group references would force an xcodegen re-run after
+      # each new set's logo lands.
+      - path: YGORip/Resources/Bundled
+        type: folder
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lavailabs.ygorip
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    info:
+      path: YGORip/Info.plist
+      properties:
+        CFBundleDisplayName: YGORip
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    entitlements:
+      path: YGORip/YGORip.entitlements
+    scheme:
+      storeKitConfiguration: YGORip/Resources/YGORip.storekit
