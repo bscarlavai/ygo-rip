@@ -266,6 +266,58 @@ def _rarity_tier(rarity):
     return _RARITY_TIER_TABLE.get((rarity or "").lower(), 0)
 
 
+# Pull-frequency rank used as a tiebreaker in printing dedup. Modern YGO
+# sets reprint the same card under the same English numbering at multiple
+# rarities — e.g. AGOV-EN006 ships Diabellstar both as Secret Rare AND as
+# Quarter Century Secret Rare; AGOV-EN020 ships Dark Hole Dragon as Ultra
+# Rare AND as QCSR. When `_printing_priority` ties on region, we keep the
+# printing the player is most likely to pull from a normal pack — the
+# lowest rank below. This way the engine fills its normal rarity slots
+# (Common/Rare/Super/Ultra/Secret) correctly; chase variants only enter
+# the pool if we explicitly add them with distinct foil treatments and
+# their own slot odds. Lower = more common in packs.
+_PULL_FREQUENCY_RANK = {
+    "common": 0,
+    "short print": 1,
+    "super short print": 2,
+    "rare": 10,
+    "normal parallel rare": 11,
+    "mosaic rare": 11,
+    "starfoil rare": 11,
+    "shatterfoil rare": 11,
+    "duel terminal normal parallel rare": 12,
+    "super rare": 20,
+    "duel terminal rare parallel rare": 21,
+    "duel terminal super parallel rare": 21,
+    "ultra rare": 30,
+    "ultra parallel rare": 31,
+    "duel terminal ultra parallel rare": 31,
+    "ultra rare (pharaoh's rare)": 32,
+    "ultimate rare": 33,
+    "platinum rare": 34,
+    "secret rare": 40,
+    "ghost rare": 50,
+    "collector's rare": 60,
+    "extra secret rare": 65,
+    "extra secret": 65,
+    "ultra secret rare": 65,
+    "gold rare": 70,
+    "gold secret rare": 70,
+    "premium gold rare": 70,
+    "platinum secret rare": 70,
+    "quarter century secret rare": 80,
+    "starlight rare": 90,
+    "ghost/gold rare": 90,
+    "10000 secret rare": 95,
+    "grand master rare": 95,
+    "prismatic secret rare": 100,
+}
+
+
+def _pull_frequency_rank(rarity):
+    return _PULL_FREQUENCY_RANK.get((rarity or "").lower(), 99)
+
+
 def _set_number(printing_code):
     """Numeric suffix of a per-printing set_code like 'PHHY-EN001' → 1.
     Falls back to a huge value so cards with no number sort last."""
@@ -321,9 +373,15 @@ def index_printings(cards):
 
     YGOPRODeck records each printing under `card_sets[]` with set_name,
     set_code (a per-printing identifier like 'LOB-EN001'), set_rarity, etc.
-    Multiple regional printings of the same card in the same set (e.g.
-    LOB-001 / LOB-E001 / LOB-EN001) collapse to one entry — we keep the
-    EN version, falling back to original numbering, then other regions.
+    Multiple printings of the same card in the same set collapse to one
+    entry. Tiebreaker is a 2-tuple: (region preference, pull frequency).
+    Region prefers EN > original-no-region > E-variant > other regional.
+    Pull frequency picks the lowest rarity when region ties — modern sets
+    print the same English numbering at base + chase variants (Diabellstar
+    as Secret Rare AND Quarter Century Secret Rare at AGOV-EN006); keeping
+    the base means the engine's normal slots can find it and chase
+    variants are something we explicitly add later with their own
+    treatments.
     """
     # First pass: collect all (set_name, card_id) → best printing
     best = {}  # (set_name, card_id) → (priority, printing dict)
@@ -339,7 +397,7 @@ def index_printings(cards):
             rarity = printing.get("set_rarity", "Common")
             if not set_name:
                 continue
-            priority = _printing_priority(set_code_full)
+            priority = (_printing_priority(set_code_full), _pull_frequency_rank(rarity))
             key = (set_name, cid)
             entry = (priority, {
                 "id": cid,
@@ -744,7 +802,6 @@ def main():
         name = s.get("set_name", "")
         code = s.get("set_code", "")
         tcg_date = s.get("tcg_date", "") or ""
-        num_cards = s.get("num_of_cards", 0)
         if not code:
             continue
         if is_collab_set(name):
@@ -765,7 +822,13 @@ def main():
             "code": code,
             "name": name,
             "tcgDate": tcg_date,
-            "totalCards": num_cards,
+            # Use the deduped printing count (one entry per card-id-per-set),
+            # NOT YGOPRODeck's `num_of_cards` which inflates by rarity
+            # variants — Blue-Eyes Common + Blue-Eyes Ultra would count as
+            # 2. The collection-progress denominator must match the actually
+            # pullable pool, otherwise the bar tops out below 100% (LOB
+            # was 126 cards in a "355-card" set, etc.).
+            "totalCards": len(printings),
             "era": era,
             "shelf": shelf_for(name, tcg_date),
             "featuredCardID": featured_card_id(printings, era),
