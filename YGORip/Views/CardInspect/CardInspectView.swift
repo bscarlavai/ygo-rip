@@ -33,8 +33,19 @@ struct CardInspectView: View {
         return nil
     }
 
+    /// Whether the foil shader should actually be running. Matches poke-rip's
+    /// pattern: only run when the user is actively touching the card OR a
+    /// passive motion source (idle sweep / gyro) is on. Skipping the shader
+    /// when no animation is happening is both a perf win (no GPU cost
+    /// re-rendering a static foil) and a stability win (reduces the surface
+    /// for the Metal shader / `@Observable tilt` interaction to misbehave
+    /// during gesture transitions).
+    private var foilActive: Bool {
+        isTouchingCard || passiveMotionSource != nil
+    }
+
     private var effectiveTreatment: FoilTreatment {
-        guard !reduceMotion else { return .none }
+        guard !reduceMotion, foilActive else { return .none }
         // YGO rarity is per-printing — every Rare+ printing IS foil in real life,
         // so we drive the treatment off rarity tier alone.
         return FoilTreatment.forYGORarity(card.rarityTier)
