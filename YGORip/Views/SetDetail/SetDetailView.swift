@@ -59,6 +59,11 @@ struct SetDetailView: View {
         .background(Theme.background)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        // Transparent nav bar so the boss-card art behind the back button
+        // shows through (cinematic full-bleed header). `.dark` color scheme
+        // forces the back button to stay white against the art.
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .task { await syncCards() }
         .fullScreenCover(isPresented: $showPackOpening) {
             SetCardListWrapper(setID: set.apiID) { cards in
@@ -73,38 +78,59 @@ struct SetDetailView: View {
 
     // MARK: - Hero
 
+    /// Boss-card art as a full-bleed backdrop behind the foreground content
+    /// (name, stats, collection bar). The art reaches the top and edges of
+    /// the screen via negative horizontal padding + a large upward offset
+    /// — same pattern as poke-rip's hero. The collection bar carries a
+    /// `.ultraThinMaterial` background, which automatically blurs ONLY the
+    /// portion of the art that sits behind the bar; the rest stays sharp.
     private var setHero: some View {
         VStack(spacing: Theme.spacingMD) {
-            VStack(spacing: 4) {
-                SetSymbolView(set: set, size: 240, color: Theme.accent)
-                    .padding(.top, Theme.spacingSM)
+            // Reserve top space so the foreground text + bar sit in the
+            // lower half of the art, leaving the upper half clear for the
+            // boss-card illustration to read.
+            Spacer().frame(minHeight: 150)
 
+            // Name + stats — overlaid on the sharp art region above the
+            // collection bar.
+            VStack(alignment: .leading, spacing: 4) {
                 Text(set.name)
                     .font(.title2.weight(.bold))
-                    .foregroundStyle(Theme.primaryText)
-                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.white)
                     .lineLimit(2)
-                    .padding(.horizontal, Theme.spacingLG)
+                    .multilineTextAlignment(.leading)
+                    .shadow(color: .black.opacity(0.7), radius: 3, y: 1)
+                Text("\(set.totalCards) cards  •  \(set.formattedReleaseDate)")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.secondaryText)
+                    .shadow(color: .black.opacity(0.7), radius: 2, y: 1)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Theme.spacingMD)
 
-            Text("\(set.totalCards) cards  •  \(set.formattedReleaseDate)")
-                .font(.subheadline)
-                .foregroundStyle(Theme.secondaryText)
-
+            // Collection bar — its own background uses `.ultraThinMaterial`
+            // (set up inside the component itself) so the blur localizes
+            // to the bar's footprint without a nested-card look.
             SetCollectionBar(setID: set.apiID, totalCards: set.totalCards)
                 .padding(.horizontal, Theme.spacingMD)
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, Theme.spacingMD)
         .background {
-            // Giant blurred symbol as ambient atmosphere behind the hero.
-            SetSymbolView(set: set, size: 360, color: Theme.accent)
-                .frame(height: 650)
-                .blur(radius: 60)
-                .opacity(0.25)
-                .offset(y: -180)
-                .padding(.horizontal, -Theme.spacingMD)
-                .allowsHitTesting(false)
+            if set.featuredCardCroppedURL != nil {
+                SharpHeroBackdrop(set: set)
+                    .padding(.horizontal, -Theme.spacingMD)
+                    .offset(y: -120)
+                    .allowsHitTesting(false)
+            } else {
+                // Fallback for sparse sets without a featured card —
+                // centered YGO logo on dark.
+                VStack {
+                    SetSymbolView(set: set, size: 240, color: Theme.accent)
+                        .padding(.top, Theme.spacingLG)
+                    Spacer()
+                }
+            }
         }
     }
 
@@ -380,7 +406,13 @@ struct SetCollectionBar: View {
 
         }
         .padding(Theme.spacingMD)
-        .background(Theme.background.opacity(0.4), in: .rect(cornerRadius: Theme.radiusMD))
+        // `.ultraThinMaterial` blurs whatever sits behind the bar — used
+        // on SetDetail where the sharp boss-card backdrop is visible
+        // everywhere else, and we want a focused-blur window just for
+        // the progress bar's footprint. The dark capsule fill that used
+        // to live here was making a "two cards" sandwich when an outer
+        // material wrapper was added.
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: Theme.radiusMD))
     }
 }
 
@@ -644,3 +676,61 @@ struct SetCardListWrapper<Content: View>: View {
     }
 }
 
+
+// MARK: - Hero banner (boss-card cropped art)
+
+/// Wide-aspect cinematic banner for the SetDetail header. Renders the
+/// set's featured card's cropped art (the painted illustration, no
+/// frame) with a darken-gradient + set name + stats overlay anchored
+/// bottom-leading. Aspect-anchored via `Color.clear` so the
+/// scaledToFill image can't propagate intrinsic dimensions to the
+/// outer layout. Uses the same `ImageCacheService` path as everything
+/// else card-image-shaped.
+private struct SharpHeroBackdrop: View {
+    let set: SetModel
+    @State private var artImage: UIImage?
+
+    var body: some View {
+        Group {
+            if let img = artImage {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Theme.cardSurface
+            }
+        }
+        .frame(maxWidth: .infinity)
+        // Minimum height that, with the upward offset on the host,
+        // still reaches the very top of the screen (under the back
+        // button) and bleeds off the horizontal edges. Anything taller
+        // visibly squishes boss-card crops — they aren't authored to be
+        // scaled tall.
+        .frame(height: 480)
+        .clipped()
+        .overlay {
+            // Bottom darken so anything downstream of the hero meets
+            // Theme.background, not bright art. Mid region stays sharp
+            // for the name + stats.
+            LinearGradient(
+                stops: [
+                    .init(color: .clear,                       location: 0.45),
+                    .init(color: Theme.background.opacity(0.4), location: 0.80),
+                    .init(color: Theme.background,             location: 1.00),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .task(id: set.featuredCardCroppedURL ?? "") {
+            guard let url = set.featuredCardCroppedURL else { return }
+            if let cached = ImageCacheService.shared.cachedImage(for: url) {
+                self.artImage = cached
+                return
+            }
+            if let img = try? await ImageCacheService.shared.image(for: url) {
+                self.artImage = img
+            }
+        }
+    }
+}
