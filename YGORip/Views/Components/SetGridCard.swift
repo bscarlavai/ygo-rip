@@ -70,6 +70,13 @@ struct SetGridCard: View {
             .background(Theme.cardSurface)
             .clipShape(.rect(cornerRadius: Theme.radiusMD))
             .overlay {
+                // Subtle hairline border so tiles separate from the dark
+                // Home background. Hidden under the holo border when the
+                // set is complete.
+                RoundedRectangle(cornerRadius: Theme.radiusMD)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+            }
+            .overlay {
                 if isComplete {
                     RoundedRectangle(cornerRadius: Theme.radiusMD)
                         .strokeBorder(
