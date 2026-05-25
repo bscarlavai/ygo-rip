@@ -38,18 +38,38 @@ their CDN exactly once per device, then lives in `FileManager` caches dir until 
 - If YGOPRODeck ever complains, the escape hatch is mirroring to our own bucket (S3 +
   CloudFront). Not worth the setup cost until forced.
 
-### 2. Set logos: bundled at build time, hybrid sources
-YGOPRODeck has **no** set image URLs at all. Solutions used by sibling apps don't fit:
-- poke-rip pattern (API returns logo URL) — not available.
-- mtg-rip pattern (Keyrune icon font) — no YGO equivalent exists; YGO sets use full pack-art logos, not corner glyphs.
+### 2. Per-set identity: boss-card cropped art, not set logos
+Sibling apps lean on per-set logos for visual identity — poke-rip uses
+pokemontcg.io's `set.images.logo`, mtg-rip uses Keyrune glyphs. Neither
+has a YGO equivalent: YGOPRODeck doesn't serve set logos at all, and the
+Yugipedia "logos" we tried are either full-pack-art photographs (which
+looked like "a pack inside a pack" on the Home grid) or only available
+for the ~60 newest sets.
 
-The data pipeline (`data-pipeline/build_bundle.py`) pulls set logos from:
-1. **YGOJSON** `locales[].image` where present (opportunistic coverage).
-2. **Yugipedia** `<SETCODE>-LogoEN.png` via MediaWiki API as fallback.
-3. Era-bucketed generic tile for sets with neither.
+Instead, every set in `sets.json` has a `featuredCardID` — the numeric
+YGOPRODeck ID of the set's "boss / cover" card — picked at pipeline time
+by an era-aware heuristic in `data-pipeline/build_bundle.py`:
 
-Logos are downloaded once at build time and mirrored into the app bundle as PNGs.
-Sets are stable; logos don't change after release. ~1000 sets × small PNG = trivial bundle size.
+- **Modern era** (Arc-V onward, 2014+): highest rarity tier in the set,
+  tie-broken by lowest set_number. The cover is reliably the Quarter
+  Century / Starlight / Collector's chase card.
+- **Pre-modern** (LOB through Zexal): Ultra Rare at the lowest
+  set_number. Old sets didn't have higher tiers; cover was always the
+  Ultra Rare at `<CODE>-001` (e.g. LOB's Blue-Eyes White Dragon at
+  LOB-001, MRD's Gate Guardian, SDK's Blue-Eyes). Falls back to the
+  highest-tier card if no Ultras exist (sparse promo sets).
+
+The `SetGridCard` renders that card's cropped art
+(`https://images.ygoprodeck.com/images/cards_cropped/{id}.jpg`) as the
+tile background, with a bottom darken-gradient + name/counter overlay.
+The cropped art is YGOPRODeck's pre-rendered artwork-only crop (no card
+frame / name / stats / text). Each cropped image is ~30–60 KB,
+lazy-fetched via `ImageCacheService` (memory + disk cache) on tile
+appear — no bundle bloat, no upfront download.
+
+A single bundled `ygo_logo.png` (the Yu-Gi-Oh! wordmark) ships in the
+bundle for the Foil Pack visual + as a fallback for the rare set without
+a `featuredCardID`.
 
 ### 3. Pull rates: hand-authored per era
 No community dataset exists for YGO pack composition (no MTGJSON `booster`-field equivalent;

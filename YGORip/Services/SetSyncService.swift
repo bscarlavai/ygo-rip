@@ -48,11 +48,13 @@ actor SetSyncService {
                 guard model.name != record.name
                     || model.totalCards != record.totalCards
                     || model.shelf != record.shelf
-                    || model.era != record.era else { continue }
+                    || model.era != record.era
+                    || model.featuredCardID != record.featuredCardID else { continue }
                 model.name = record.name
                 model.totalCards = record.totalCards
                 model.shelf = record.shelf
                 model.era = record.era
+                model.featuredCardID = record.featuredCardID
             } else {
                 let model = SetModel(
                     apiID: record.code,
@@ -60,7 +62,8 @@ actor SetSyncService {
                     releaseDate: record.tcgDate,
                     totalCards: record.totalCards,
                     era: record.era,
-                    shelf: record.shelf
+                    shelf: record.shelf,
+                    featuredCardID: record.featuredCardID
                 )
                 context.insert(model)
             }
@@ -169,6 +172,7 @@ struct BundledSet: Decodable {
     let totalCards: Int
     let era: String?
     let shelf: String
+    let featuredCardID: Int?
 }
 
 struct BundledCardDef: Decodable {

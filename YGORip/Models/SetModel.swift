@@ -15,13 +15,21 @@ final class SetModel {
     /// Home-screen shelf, e.g. "era_lob", "premium", "structure", "tin", "speed_duel".
     /// Drives the Home grouping only; pack opening is driven by `era`.
     var shelf: String
+    /// Numeric YGOPRODeck ID of the "boss / cover" card for this set, picked
+    /// by `data-pipeline/build_bundle.py` via an era-aware heuristic. Used
+    /// as the per-set visual identity in the Home grid — the tile background
+    /// is the card's cropped art (no frame, no text). May be nil for sets
+    /// where the pipeline couldn't pick one (sparse promo sets).
+    var featuredCardID: Int?
+
     init(
         apiID: String,
         name: String,
         releaseDate: String,
         totalCards: Int,
         era: String? = nil,
-        shelf: String = "other"
+        shelf: String = "other",
+        featuredCardID: Int? = nil
     ) {
         self.apiID = apiID
         self.name = name
@@ -29,6 +37,15 @@ final class SetModel {
         self.totalCards = totalCards
         self.era = era
         self.shelf = shelf
+        self.featuredCardID = featuredCardID
+    }
+
+    /// Cropped-art URL for the featured card — the painted illustration
+    /// only, no card frame / name / stats. Used as the Home tile background.
+    /// YGOPRODeck serves these at a stable URL pattern.
+    var featuredCardCroppedURL: String? {
+        guard let id = featuredCardID else { return nil }
+        return "https://images.ygoprodeck.com/images/cards_cropped/\(id).jpg"
     }
 
     /// Human-readable era label for UI grouping pills.

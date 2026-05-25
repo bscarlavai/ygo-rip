@@ -243,6 +243,79 @@ def _printing_priority(set_code_full):
     return 5
 
 
+# Rarity-rank lookup (mirror of Swift CardModel.rarityRank, used only here).
+_RARITY_TIER_TABLE = {
+    "common": 0, "short print": 0, "super short print": 0,
+    "rare": 1, "normal parallel rare": 1, "mosaic rare": 1, "starfoil rare": 1,
+        "shatterfoil rare": 1, "duel terminal normal parallel rare": 1,
+    "super rare": 2, "duel terminal rare parallel rare": 2,
+        "duel terminal super parallel rare": 2,
+    "ultra rare": 3, "ultimate rare": 3, "platinum rare": 3,
+        "ultra parallel rare": 3, "duel terminal ultra parallel rare": 3,
+        "ultra rare (pharaoh's rare)": 3,
+    "secret rare": 4, "ghost rare": 4, "starlight rare": 4,
+        "quarter century secret rare": 4, "collector's rare": 4,
+        "prismatic secret rare": 4, "platinum secret rare": 4,
+        "gold rare": 4, "gold secret rare": 4, "premium gold rare": 4,
+        "ghost/gold rare": 4, "grand master rare": 4, "ultra secret rare": 4,
+        "extra secret rare": 4, "extra secret": 4, "10000 secret rare": 4,
+}
+
+
+def _rarity_tier(rarity):
+    return _RARITY_TIER_TABLE.get((rarity or "").lower(), 0)
+
+
+def _set_number(printing_code):
+    """Numeric suffix of a per-printing set_code like 'PHHY-EN001' → 1.
+    Falls back to a huge value so cards with no number sort last."""
+    if not printing_code:
+        return 99999
+    m = re.search(r"(\d+)$", printing_code)
+    return int(m.group(1)) if m else 99999
+
+
+# Eras where the cover monster is reliably the highest-rarity card.
+# Pre-Arc-V sets predate the Quarter Century / Starlight tiers — for those
+# the cover is conventionally the Ultra Rare at set_number 001, with Secret
+# Rares being a separate "extra chase" rather than the headlining card.
+_MODERN_ERAS = {"arcv", "vrains", "sevens", "gorush"}
+
+
+def featured_card_id(printings, era):
+    """Heuristic pick for the 'boss / cover' card of a set, used as the
+    visual identity on the Home grid tile.
+
+    - Modern era (Arc-V onward, 2014+): highest rarity tier, tie-break by
+      lowest set_number. The cover is reliably the Quarter Century / Starlight
+      / Collector's chase card.
+    - Pre-modern: Ultra Rare at the lowest set_number. Old sets had only
+      Common/Rare/Super/Ultra/Secret — cover monster was always the Ultra
+      Rare at #001 (e.g. LOB's Blue-Eyes White Dragon at LOB-001). Falls
+      back to the highest-tier card if no Ultra exists (sparse promo sets).
+    """
+    if not printings:
+        return None
+
+    if era in _MODERN_ERAS:
+        ordered = sorted(
+            printings,
+            key=lambda p: (-_rarity_tier(p["rarity"]), _set_number(p["code"])),
+        )
+        return ordered[0]["id"]
+
+    ultras = [p for p in printings if _rarity_tier(p["rarity"]) == 3]
+    if ultras:
+        ultras.sort(key=lambda p: _set_number(p["code"]))
+        return ultras[0]["id"]
+
+    ordered = sorted(
+        printings,
+        key=lambda p: (-_rarity_tier(p["rarity"]), _set_number(p["code"])),
+    )
+    return ordered[0]["id"]
+
+
 def index_printings(cards):
     """Build: set_name → [{id, rarity, code, price}], deduped per (set, card_id).
 
@@ -525,13 +598,15 @@ def main():
             # an empty checklist and no way to pull anything; just drop.
             sets_no_printings.append((code, name))
             continue
+        era = era_for_date(tcg_date)
         record = {
             "code": code,
             "name": name,
             "tcgDate": tcg_date,
             "totalCards": num_cards,
-            "era": era_for_date(tcg_date),
+            "era": era,
             "shelf": shelf_for(name, tcg_date),
+            "featuredCardID": featured_card_id(printings, era),
         }
         set_records.append(record)
 
