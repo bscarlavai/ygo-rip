@@ -11,8 +11,8 @@ struct SetGridCard: View {
 
     var body: some View {
         VStack(spacing: Theme.spacingSM) {
-            SetSymbolView(setCode: set.apiID, size: 56, color: Theme.accent)
-                .frame(height: 80)
+            SetSymbolView(set: set, size: 130, color: Theme.accent)
+                .frame(height: 60)
 
             Text(set.name)
                 .font(.caption.weight(.semibold))

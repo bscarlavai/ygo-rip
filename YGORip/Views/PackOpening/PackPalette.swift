@@ -47,6 +47,35 @@ struct PackPalette: Equatable {
         )
     }
 
+    /// Apply a hue rotation (degrees) to every color in the palette. Used
+    /// for per-set variation on top of the era base palette.
+    func hueShifted(by degrees: Double) -> PackPalette {
+        PackPalette(
+            deep:      deep.hueShifted(by: degrees),
+            body:      body.hueShifted(by: degrees),
+            mid:       mid.hueShifted(by: degrees),
+            highlight: highlight.hueShifted(by: degrees),
+            foil:      foil.hueShifted(by: degrees)
+        )
+    }
+
+    /// Look up the palette for a given set. Combines an era / shelf base
+    /// palette with a deterministic per-set hue shift so every set gets a
+    /// visually distinct foil pack even within the same era.
+    static func palette(for set: SetModel) -> PackPalette {
+        let base = palette(forSeries: set.series, shelf: set.shelf)
+        let shift = hueShift(for: set.apiID)
+        return base.hueShifted(by: shift)
+    }
+
+    /// Deterministic hue offset (-22°...+22°) from a set's apiID. Stable
+    /// across launches (uses byte sum, not Swift's randomized hashValue).
+    /// Range is tight so the era's identity stays recognizable.
+    private static func hueShift(for setID: String) -> Double {
+        let sum = setID.utf8.reduce(0) { $0 &+ Int($1) }
+        return Double(sum % 45) - 22  // -22 ... +22
+    }
+
     /// Look up a palette by series label (from `SetModel.series`) and shelf.
     /// Series labels match the strings produced by `SetModel.seriesLabel(era:shelf:)`.
     static func palette(forSeries series: String, shelf: String = "") -> PackPalette {
@@ -213,4 +242,26 @@ struct PackPalette: Equatable {
         highlight: Color(hex: 0xFFD700),
         foil:      Color(hex: 0xFFE891)
     )
+}
+
+// MARK: - Color hue manipulation
+
+private extension Color {
+    /// Returns a new color with its hue rotated by the given amount (in degrees).
+    /// Saturation and brightness are preserved. Useful for deterministically
+    /// shifting a palette per-set while keeping the era's identity recognizable.
+    func hueShifted(by degrees: Double) -> Color {
+        let uic = UIColor(self)
+        var h: CGFloat = 0
+        var s: CGFloat = 0
+        var b: CGFloat = 0
+        var a: CGFloat = 0
+        guard uic.getHue(&h, saturation: &s, brightness: &b, alpha: &a) else {
+            return self
+        }
+        let shifted = CGFloat(degrees / 360.0)
+        var newHue = h + shifted
+        newHue = newHue - floor(newHue)  // wrap into [0, 1)
+        return Color(hue: Double(newHue), saturation: Double(s), brightness: Double(b), opacity: Double(a))
+    }
 }

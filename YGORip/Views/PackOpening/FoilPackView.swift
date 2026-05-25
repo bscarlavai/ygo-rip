@@ -17,67 +17,10 @@ struct FoilPackView: View {
     static let aspectRatio: CGFloat = 0.573
 
     var body: some View {
-        Group {
-            // Sets with `logoStyle == "packArt"` (older sets where Yugipedia
-            // only has a full pack-art photo, not a clean text logo) get the
-            // photo as the entire pack visual — no synthetic foil template.
-            if set.logoStyle == "packArt",
-               let img = SetSymbolView.logoImage(for: set.apiID)
-            {
-                PackArtBody(image: img, palette: palette, cardCount: cardCount)
-            } else {
-                CachedPackBody(set: set, palette: palette)
-                    .aspectRatio(Self.aspectRatio, contentMode: .fit)
-            }
-        }
-        .padding(.horizontal, Theme.spacingMD)
-        .shadow(color: palette.deep.opacity(0.5), radius: 22, y: 14)
-    }
-
-    private var cardCount: Int {
-        PackConfig.config(for: set).cardsPerPack
-    }
-}
-
-// MARK: - Pack-art body (full photograph variant)
-
-/// For sets whose only available logo asset is a full pack-art photograph
-/// (older sets, starter decks): render the photo as the pack and overlay
-/// the card-count pill near the bottom. Skips the synthetic foil template,
-/// noise grain, and highlights — the photo already has real-world foil and
-/// lighting baked in, layering ours on top fights the source image.
-private struct PackArtBody: View {
-    let image: UIImage
-    let palette: PackPalette
-    let cardCount: Int
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: geo.size.width, height: geo.size.height)
-
-                VStack {
-                    Spacer()
-                    Text("\(cardCount) CARDS")
-                        .font(.system(size: 13, weight: .heavy, design: .rounded))
-                        .tracking(3)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 7)
-                        .background {
-                            Capsule()
-                                .fill(palette.deep.opacity(0.85))
-                                .overlay(Capsule().stroke(palette.foil.opacity(0.5), lineWidth: 0.7))
-                        }
-                        .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
-                        .padding(.bottom, geo.size.height * 0.04)
-                }
-            }
-        }
-        .aspectRatio(image.size.width / image.size.height, contentMode: .fit)
+        CachedPackBody(set: set, palette: palette)
+            .aspectRatio(Self.aspectRatio, contentMode: .fit)
+            .padding(.horizontal, Theme.spacingMD)
+            .shadow(color: palette.deep.opacity(0.5), radius: 22, y: 14)
     }
 }
 
@@ -143,31 +86,19 @@ private struct CachedPackBody: View {
         .drawingGroup()
     }
 
-    /// Top accent stripe + embossed set symbol + bottom card-count pill.
-    /// Layout uses proportional spacing (% of rendered pack height) so
-    /// elements stay aligned regardless of rendered size.
+    /// Embossed set symbol + bottom card-count pill. Layout uses
+    /// proportional spacing (% of rendered pack height) so elements stay
+    /// aligned regardless of rendered size.
     private var packContent: some View {
         GeometryReader { geo in
             VStack(spacing: 0) {
-                // Reserve top crimped-seal area (~9% of pack height)
-                Spacer().frame(height: geo.size.height * 0.09)
-
-                // Symmetric foil accent stripe — mid/highlight/mid bands
-                // in the era's color, full-width, masked to the pack body
-                // silhouette at this height.
-                VStack(spacing: 1) {
-                    Rectangle().fill(palette.mid).frame(height: 2)
-                    Rectangle().fill(palette.highlight).frame(height: 3)
-                    Rectangle().fill(palette.mid).frame(height: 2)
-                }
-
                 Spacer()
 
-                // Embossed set symbol — bundled logo PNG with SF Symbol
-                // fallback (see SetSymbolView). Single small shadow so it
-                // feels printed onto the pack surface rather than floating
-                // above it.
-                SetSymbolView(setCode: set.apiID, size: 110, color: palette.highlight)
+                // Embossed set symbol — TCG logo with a single small shadow
+                // so it feels printed onto the pack surface rather than
+                // floating above it. Sized proportional to the rendered pack
+                // width so it scales gracefully across phone sizes.
+                SetSymbolView(set: set, size: geo.size.width * 0.78, color: palette.highlight)
                     .shadow(color: .black.opacity(0.35), radius: 1.5, y: 1)
 
                 Spacer()
@@ -179,6 +110,10 @@ private struct CachedPackBody: View {
                 // the pill sits well above the crimp.
                 Spacer().frame(height: geo.size.height * 0.17)
             }
+            // Without this the VStack collapses to the width of its widest
+            // child and sits at top-leading of the GeometryReader, which
+            // shifts the entire logo+pill stack left of the pack center.
+            .frame(width: geo.size.width)
         }
     }
 

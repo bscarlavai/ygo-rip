@@ -59,25 +59,61 @@ final class CardModel {
 
     static func rarityRank(for rarity: String) -> Int {
         switch rarity.lowercased() {
-        case "common", "short print", "shatterfoil rare":
+        // Tier 0: Common / Common-equivalent (flat, no foil).
+        case "common", "short print", "super short print":
             return 0
-        case "rare":
+
+        // Tier 1: Rare / Rare-equivalent foil variants (silver-name level).
+        // Parallel Rares = foil-treatment variants of base-rarity cards in
+        // their respective sets (DT arcade, Mattel promos, etc.). Mosaic /
+        // Starfoil / Shatterfoil are Battle Pack / Star Pack mass-foil
+        // variants applied to common-slot cards.
+        case "rare",
+             "normal parallel rare",
+             "duel terminal normal parallel rare",
+             "mosaic rare",
+             "starfoil rare",
+             "shatterfoil rare":
             return 1
-        case "super rare":
+
+        // Tier 2: Super Rare-equivalent.
+        case "super rare",
+             "duel terminal rare parallel rare",
+             "duel terminal super parallel rare":
             return 2
-        case "ultra rare", "ultimate rare", "platinum rare":
+
+        // Tier 3: Ultra / Ultimate Rare-equivalent.
+        case "ultra rare",
+             "ultimate rare",
+             "platinum rare",
+             "ultra parallel rare",
+             "duel terminal ultra parallel rare",
+             "ultra rare (pharaoh's rare)":
             return 3
+
+        // Tier 4: Chase tier (Secret Rare and above).
         case "secret rare",
              "ghost rare",
              "starlight rare",
              "quarter century secret rare",
-             "collector's rare",
+             "collector's rare", "collectors rare",
              "prismatic secret rare",
              "platinum secret rare",
              "gold rare",
              "gold secret rare",
-             "premium gold rare":
+             "premium gold rare",
+             "ghost/gold rare",
+             "grand master rare",
+             "ultra secret rare",
+             "extra secret rare",
+             "extra secret",
+             "10000 secret rare":
             return 4
+
+        // Unknown / garbage rarity strings ("New", "2", "Cr", region notes,
+        // etc.) — treat as Common-tier. They're displayed verbatim in inspect
+        // so the rarity field still tells the truth about what YGOPRODeck
+        // labeled the printing; this rank just makes them pullable.
         default:
             return 0
         }

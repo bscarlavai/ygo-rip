@@ -120,7 +120,8 @@ private enum CardRarityRank {
 // MARK: - Pack Configuration
 
 struct PackConfig {
-    let packType: String
+    /// Era key this config covers ("lob_era" | "classic" | "modern").
+    let era: String
     let commonSlots: Int
     /// Kept for sibling-app API parity — always 0 for YGO (no Uncommon tier).
     let uncommonSlots: Int
@@ -142,41 +143,39 @@ struct PackConfig {
     }
 }
 
-// MARK: - Hand-authored per-packType configs
+// MARK: - Hand-authored per-era configs
+//
+// Every set opens as a *foil pack* — there are no Structure / Tin / Premium /
+// Speed Duel / Battle Pack pack types. The pack composition is driven solely
+// by the set's `era`. Whatever rarities the set's printing pool actually
+// contains is handled at slot-fill time by `PackPrefetcher`'s tier-aware
+// fallback: a Common slot in a set with no Commons (e.g. Legendary
+// Collection) naturally fills from the higher tiers the set *does* have.
 
 extension PackConfig {
 
-    /// Look up the config for a given set. Dispatch is by `SetModel.packType`
-    /// (set at build-bundle time from `tcg_date` + name patterns).
+    /// Look up the era-appropriate config for a given set. Falls back to
+    /// modern for sets with no era assignment (rare — only collector boxes
+    /// without a tcg_date).
     static func config(for set: SetModel) -> PackConfig {
-        config(forPackType: set.packType)
+        config(forEra: set.era ?? "gorush")
     }
 
-    /// Legacy entry point used by code paths that still pass a set code.
-    /// Resolves the SetModel from a thread-local registry would be cleaner,
-    /// but since every call site has a SetModel in scope, prefer `config(for:)`.
-    static func config(forPackType packType: String) -> PackConfig {
-        if let cached = ConfigCache.shared.get(packType) {
-            return cached
+    static func config(forEra era: String) -> PackConfig {
+        if let cached = ConfigCache.shared.get(era) { return cached }
+        let config: PackConfig
+        switch era {
+        case "lob":
+            config = lobEra
+        case "gx", "5ds", "zexal":
+            config = classicEra
+        case "arcv", "vrains", "sevens", "gorush":
+            config = modernEra
+        default:
+            config = modernEra
         }
-        let config = build(packType: packType)
-        ConfigCache.shared.put(packType, config: config)
+        ConfigCache.shared.put(era, config: config)
         return config
-    }
-
-    private static func build(packType: String) -> PackConfig {
-        switch packType {
-        case "lob_era":         return lobEra
-        case "classic":         return classicEra
-        case "modern":          return modernEra
-        case "premium":         return premium
-        case "tin":             return premium       // tins simulate one premium pack
-        case "speed_duel":      return speedDuel
-        case "battle_pack":     return battlePack
-        case "world_premiere":  return worldPremiere
-        case "structure":       return structureDeck
-        default:                return modernEra     // safe default for unknown set types
-        }
     }
 
     // -----------------------------------------------------------------------------
@@ -186,7 +185,7 @@ extension PackConfig {
     // Short Prints were ~1:3 packs in this era — common but distinctly rarer.
     // Secret Rare was the chase at roughly 1:24. No Starlight, Ultimate, Ghost, etc.
     static let lobEra = PackConfig(
-        packType: "lob_era",
+        era: "lob_era",
         commonSlots: 8,
         uncommonSlots: 0,
         hasReverseHoloSlot: false,
@@ -211,7 +210,7 @@ extension PackConfig {
     // Revolution (2005), Ghost Rare in Phantom Darkness (2008). Slightly lower
     // Rare-slot ceiling than LOB since the rare distribution stretches further up.
     static let classicEra = PackConfig(
-        packType: "classic",
+        era: "classic",
         commonSlots: 8,
         uncommonSlots: 0,
         hasReverseHoloSlot: false,
@@ -235,8 +234,13 @@ extension PackConfig {
     // The chase slot rolls Super through Prismatic Secret Rare. Special tiers
     // (Starlight, Quarter Century Secret, Collector's, Prismatic) are roughly
     // 1:24 boxes combined — ~2-3% per pack.
+    //
+    // Sets without 9 cards' worth of Commons (Legendary Collection, Mega Tin,
+    // Structure Deck, etc.) naturally fall through to higher-tier cards via
+    // PackPrefetcher's tier-aware fill — that's the "premium pack feel" for
+    // those products without needing a separate config.
     static let modernEra = PackConfig(
-        packType: "modern",
+        era: "modern",
         commonSlots: 7,
         uncommonSlots: 0,
         hasReverseHoloSlot: true,
@@ -252,103 +256,6 @@ extension PackConfig {
             ("Prismatic Secret Rare", 0.005),
         ],
         reverseHoloWeights: [("Rare", 1.0)]
-    )
-
-    // -----------------------------------------------------------------------------
-    // Premium products (Legendary Collection, 25th Anniversary, Rarity Collection,
-    // Maximum Gold, Gold Series, Premium Pack, Duelist Pack, etc.).
-    //
-    // 5-card pack, every slot foil. Real composition varies wildly per product;
-    // this is an averaged distribution that lets every pull feel chase-worthy.
-    static let premium = PackConfig(
-        packType: "premium",
-        commonSlots: 0,
-        uncommonSlots: 0,
-        hasReverseHoloSlot: false,
-        rareSlots: 5,
-        commonSlotWeights: [],
-        rareSlotWeights: [
-            ("Super Rare", 0.35),
-            ("Ultra Rare", 0.30),
-            ("Secret Rare", 0.20),
-            ("Quarter Century Secret Rare", 0.07),
-            ("Starlight Rare", 0.04),
-            ("Collector's Rare", 0.02),
-            ("Prismatic Secret Rare", 0.02),
-        ],
-        reverseHoloWeights: []
-    )
-
-    // -----------------------------------------------------------------------------
-    // Speed Duel — a separate format with shorter packs. 4 cards: 3 Common + 1 chase.
-    static let speedDuel = PackConfig(
-        packType: "speed_duel",
-        commonSlots: 3,
-        uncommonSlots: 0,
-        hasReverseHoloSlot: false,
-        rareSlots: 1,
-        commonSlotWeights: [("Common", 1.0)],
-        rareSlotWeights: [
-            ("Super Rare", 0.55),
-            ("Ultra Rare", 0.30),
-            ("Secret Rare", 0.15),
-        ],
-        reverseHoloWeights: []
-    )
-
-    // -----------------------------------------------------------------------------
-    // Battle Pack — 15-card sealed-format packs from 2012–2014. Mostly commons
-    // with one rare-or-better.
-    static let battlePack = PackConfig(
-        packType: "battle_pack",
-        commonSlots: 14,
-        uncommonSlots: 0,
-        hasReverseHoloSlot: false,
-        rareSlots: 1,
-        commonSlotWeights: [("Common", 1.0)],
-        rareSlotWeights: [
-            ("Rare", 0.60),
-            ("Super Rare", 0.25),
-            ("Ultra Rare", 0.15),
-        ],
-        reverseHoloWeights: []
-    )
-
-    // -----------------------------------------------------------------------------
-    // World Premiere — TCG-exclusive tournament/promo packs. Small + foil-heavy.
-    static let worldPremiere = PackConfig(
-        packType: "world_premiere",
-        commonSlots: 0,
-        uncommonSlots: 0,
-        hasReverseHoloSlot: false,
-        rareSlots: 3,
-        commonSlotWeights: [],
-        rareSlotWeights: [
-            ("Super Rare", 0.50),
-            ("Ultra Rare", 0.30),
-            ("Secret Rare", 0.20),
-        ],
-        reverseHoloWeights: []
-    )
-
-    // -----------------------------------------------------------------------------
-    // Structure Deck — pre-built decks aren't really pack-openable, but we still
-    // give "rip a pack" something to do: simulate a 9-card sampler from the set.
-    // Mostly Commons with one upgrade slot, matching what a sampler from a
-    // Structure Deck's reprint pool would look like.
-    static let structureDeck = PackConfig(
-        packType: "structure",
-        commonSlots: 8,
-        uncommonSlots: 0,
-        hasReverseHoloSlot: false,
-        rareSlots: 1,
-        commonSlotWeights: [("Common", 1.0)],
-        rareSlotWeights: [
-            ("Rare", 0.70),
-            ("Super Rare", 0.20),
-            ("Ultra Rare", 0.10),
-        ],
-        reverseHoloWeights: []
     )
 }
 

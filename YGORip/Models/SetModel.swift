@@ -13,29 +13,15 @@ final class SetModel {
     /// nil for sets that aren't dated or fall outside the main TCG timeline (collab/promo).
     var era: String?
     /// Home-screen shelf, e.g. "era_lob", "premium", "structure", "tin", "speed_duel".
+    /// Drives the Home grouping only; pack opening is driven by `era`.
     var shelf: String
-    /// `PullRateEngine` config key: "lob_era", "classic", "modern", "premium",
-    /// "structure", "tin", "speed_duel", "battle_pack", "world_premiere".
-    var packType: String
-    /// Asset name for the bundled set logo PNG, e.g. "set-logos/LOB".
-    /// May not exist on disk — view layer should check + fall back.
-    var logoAsset: String
-    /// How the bundled image should be displayed:
-    /// - `"logo"`   — clean text logo, embed centered on the foil pack template (poke-rip style)
-    /// - `"packArt"` — full-pack photograph, display as the entire pack visual (replaces template)
-    /// - `nil`     — no image shipped; render SF Symbol fallback
-    var logoStyle: String?
-
     init(
         apiID: String,
         name: String,
         releaseDate: String,
         totalCards: Int,
         era: String? = nil,
-        shelf: String = "other",
-        packType: String = "modern",
-        logoAsset: String = "",
-        logoStyle: String? = nil
+        shelf: String = "other"
     ) {
         self.apiID = apiID
         self.name = name
@@ -43,9 +29,6 @@ final class SetModel {
         self.totalCards = totalCards
         self.era = era
         self.shelf = shelf
-        self.packType = packType
-        self.logoAsset = logoAsset
-        self.logoStyle = logoStyle
     }
 
     /// Human-readable era label for UI grouping pills.

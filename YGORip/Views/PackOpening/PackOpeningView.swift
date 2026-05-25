@@ -83,7 +83,7 @@ struct PackOpeningView: View {
     }
 
     private var palette: PackPalette {
-        PackPalette.palette(forSeries: set.series, shelf: set.shelf)
+        PackPalette.palette(for: set)
     }
 
     // MARK: - Foil motion (per Card Motion setting)
@@ -114,73 +114,54 @@ struct PackOpeningView: View {
     }
 
     var body: some View {
-        ZStack {
-            Theme.background.ignoresSafeArea()
-
-            switch phase {
-            case .sealed:
-                sealedPhase
-            case .ripping:
-                rippingPhase
-            case .reveal:
-                revealPhase
-            case .summary:
-                summaryPhase
-            }
-
-            // Rare card flash overlay — softer opacity (0.08) so rapid card
-            // flips don't strobe. Reduce Motion disables it entirely.
-            if showRareFlash && !reduceMotion {
-                Theme.gold.opacity(0.08)
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-            }
-
-            // Close button — always top-right, 44pt minimum tap target
-            if phase != .summary {
-                VStack {
-                    HStack {
-                        Spacer()
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title)
-                                .symbolRenderingMode(.hierarchical)
-                                .foregroundStyle(.white.opacity(0.5))
-                                .frame(width: 44, height: 44)
-                                .contentShape(Rectangle())
-                        }
-                        .padding(.trailing, 12)
-                        .padding(.top, 4)
-                    }
-                    Spacer()
+        // Layout strategy: `Theme.background` is a Color (so a screen-bounded
+        // SwiftUI view), and ALL content lives in `.overlay {}` modifiers on
+        // it. Overlays do NOT propagate their children's intrinsic sizes to
+        // the host. So even when revealPhase contains a `LightRays` at
+        // .frame(width: 700, height: 700) or a `.ignoresSafeArea()` rainbow
+        // backdrop, the host's frame stays screen-sized — which means the
+        // `.safeAreaInset` X/Reveal-All buttons are also screen-bounded and
+        // can't be pushed off-screen. Prior attempts as ZStack siblings,
+        // GeometryReader+.frame(width:height:), and plain safeAreaInset all
+        // failed because the underlying ZStack-grows-to-max-child rule was
+        // never actually being short-circuited.
+        Theme.background
+            .ignoresSafeArea()
+            .overlay {
+                switch phase {
+                case .sealed:   sealedPhase
+                case .ripping:  rippingPhase
+                case .reveal:   revealPhase
+                case .summary:  summaryPhase
                 }
             }
-
-            // "Reveal All" — primary bottom button during reveal phase only.
-            // Hidden once all cards are already revealed.
-            if phase == .reveal && currentIndex < pulledCards.count - 1 {
-                VStack {
-                    Spacer()
+            .overlay {
+                // Rare card flash overlay — softer opacity (0.08) so rapid
+                // card flips don't strobe. Reduce Motion disables it.
+                if showRareFlash && !reduceMotion {
+                    Theme.gold.opacity(0.08)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                // "Reveal All" — visible only mid-reveal.
+                if phase == .reveal && currentIndex < pulledCards.count - 1 {
                     Button { revealAll() } label: {
                         Text("Reveal All")
                             .font(.headline.weight(.semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(
-                                Capsule().fill(.white.opacity(0.15))
-                            )
-                            .overlay(
-                                Capsule().stroke(.white.opacity(0.25), lineWidth: 0.5)
-                            )
+                            .background(Capsule().fill(.white.opacity(0.15)))
+                            .overlay(Capsule().stroke(.white.opacity(0.25), lineWidth: 0.5))
                             .contentShape(Capsule())
                     }
                     .padding(.horizontal, 32)
                     .padding(.bottom, 24)
                 }
             }
-        }
         .sensoryFeedback(.impact(weight: .light), trigger: hapticLight, condition: { _, _ in appState.hapticsEnabled })
         .sensoryFeedback(.impact(weight: .medium), trigger: hapticMedium, condition: { _, _ in appState.hapticsEnabled })
         .sensoryFeedback(.impact(weight: .heavy), trigger: hapticHeavy, condition: { _, _ in appState.hapticsEnabled })

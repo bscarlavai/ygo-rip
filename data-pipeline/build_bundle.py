@@ -7,13 +7,14 @@ Sources:
   - Yugipedia MediaWiki API   — fallback set logos at <SETCODE>-LogoEN.png
 
 Output: YGORip/Resources/Bundled/
-  sets.json              — array of set records (code, name, tcg_date, era, shelf, packType, logoAsset)
+  sets.json              — array of set records (code, name, tcg_date, era, shelf, logoAsset, logoStyle)
   cards.json             — global card index keyed by card ID (deduped card definitions)
   set-cards-<code>.json  — per-set printing records: {id, rarity, code, price}
-  set-logos/<code>.png   — mirrored logo PNGs (one-time scrape, lives in Assets.xcassets eventually)
+  set-logos/<code>.png   — mirrored logo PNGs (one-time scrape)
 
-Pack composition is era-driven and hand-authored in Swift (PullRateEngine). This script
-only emits the `packType` field per set, which the Swift side maps to a PackConfig.
+Pack composition is era-driven and hand-authored in Swift (PullRateEngine). Every set
+opens as a foil pack with its era's rarity distribution — no product-type-specific
+configs (Structure / Tin / Premium / etc. all use their tcg_date era's odds).
 
 Usage:
   python3 build_bundle.py                # full build (slow first run, ~5-15 min for logos)
@@ -154,53 +155,32 @@ WORLD_PREMIERE_PATTERNS = [
 ]
 
 
-def classify_set(name):
-    """Return (shelf, packType) for a set name.
+def classify_shelf(name):
+    """Return the UI shelf key for a set name (or None if it's a main-booster
+    set — those get shelved by era).
 
-    shelf:    UI grouping key (era_lob, era_gx, premium, structure, etc.)
-    packType: PullRateEngine config key (lob_era, classic, modern, premium_legendary, structure, ...)
-
-    Both are best-effort and will be overridden by name where needed.
+    Drives Home-screen grouping only; pack opening is era-driven, not shelf-
+    driven. Every set opens as a foil pack with era-appropriate odds.
     """
     n = name.lower()
-    if any(re.search(p, n) for p in STRUCTURE_PATTERNS):
-        return "structure", "structure"
-    if any(re.search(p, n) for p in TIN_PATTERNS):
-        return "tin", "tin"
-    if any(re.search(p, n) for p in SPEED_DUEL_PATTERNS):
-        return "speed_duel", "speed_duel"
-    if any(re.search(p, n) for p in BATTLE_PACK_PATTERNS):
-        return "battle_pack", "battle_pack"
-    if any(re.search(p, n) for p in WORLD_PREMIERE_PATTERNS):
-        return "world_premiere", "world_premiere"
-    if any(re.search(p, n) for p in PREMIUM_PATTERNS):
-        return "premium", "premium"
-    # Default: a main booster — shelf will be set by era below.
-    return None, "standard"
+    if any(re.search(p, n) for p in STRUCTURE_PATTERNS):       return "structure"
+    if any(re.search(p, n) for p in TIN_PATTERNS):             return "tin"
+    if any(re.search(p, n) for p in SPEED_DUEL_PATTERNS):      return "speed_duel"
+    if any(re.search(p, n) for p in BATTLE_PACK_PATTERNS):     return "battle_pack"
+    if any(re.search(p, n) for p in WORLD_PREMIERE_PATTERNS):  return "world_premiere"
+    if any(re.search(p, n) for p in PREMIUM_PATTERNS):         return "premium"
+    return None
 
 
 def shelf_for(name, tcg_date):
     """Determine shelf, falling back to era bucketing for main boosters."""
-    shelf, _ = classify_set(name)
+    shelf = classify_shelf(name)
     if shelf:
         return shelf
     era = era_for_date(tcg_date)
     if era:
         return f"era_{era}"
     return "other"
-
-
-def pack_type_for(name, tcg_date):
-    """Determine PullRateEngine packType — era-aware for main boosters."""
-    _, pack_type = classify_set(name)
-    if pack_type != "standard":
-        return pack_type
-    era = era_for_date(tcg_date)
-    if era == "lob":
-        return "lob_era"
-    if era in ("gx", "5ds", "zexal"):
-        return "classic"
-    return "modern"  # arcv onward
 
 
 # -----------------------------------------------------------------------------
@@ -546,9 +526,6 @@ def main():
             "totalCards": num_cards,
             "era": era_for_date(tcg_date),
             "shelf": shelf_for(name, tcg_date),
-            "packType": pack_type_for(name, tcg_date),
-            "logoAsset": f"set-logos/{code}",  # consumer should check existence
-            "logoStyle": None,                 # filled in during logo scrape: "logo" | "packArt" | None
         }
         set_records.append(record)
 
@@ -618,10 +595,10 @@ def main():
     for shelf, count in shelves.most_common():
         print(f"    {shelf:25s} {count}", file=sys.stderr)
 
-    pack_types = Counter(r["packType"] for r in set_records)
-    print(f"\n  Pack-type distribution:", file=sys.stderr)
-    for pt, count in pack_types.most_common():
-        print(f"    {pt:25s} {count}", file=sys.stderr)
+    eras = Counter(r["era"] or "(none)" for r in set_records)
+    print(f"\n  Era distribution:", file=sys.stderr)
+    for era, count in eras.most_common():
+        print(f"    {era:25s} {count}", file=sys.stderr)
 
     if sets_no_printings:
         print(f"\n  Sets with no printings (first 10):", file=sys.stderr)

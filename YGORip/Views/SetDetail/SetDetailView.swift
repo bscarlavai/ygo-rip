@@ -76,7 +76,7 @@ struct SetDetailView: View {
     private var setHero: some View {
         VStack(spacing: Theme.spacingMD) {
             VStack(spacing: 4) {
-                SetSymbolView(setCode: set.apiID, size: 96, color: Theme.accent)
+                SetSymbolView(set: set, size: 240, color: Theme.accent)
                     .padding(.top, Theme.spacingSM)
 
                 Text(set.name)
@@ -98,7 +98,7 @@ struct SetDetailView: View {
         .padding(.bottom, Theme.spacingMD)
         .background {
             // Giant blurred symbol as ambient atmosphere behind the hero.
-            SetSymbolView(setCode: set.apiID, size: 360, color: Theme.accent)
+            SetSymbolView(set: set, size: 360, color: Theme.accent)
                 .frame(height: 650)
                 .blur(radius: 60)
                 .opacity(0.25)

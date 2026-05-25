@@ -203,29 +203,53 @@ final class PackPrefetcher {
             let card: CardModel
         }
 
+        // Pre-bucket cards by `rarityTier` so per-slot tier-fallback lookups
+        // are cheap. Built once per pack.
+        let cardsByTier: [Int: [CardModel]] = Dictionary(grouping: cards) {
+            CardModel.rarityRank(for: $0.rarity)
+        }
+
         var picks: [Pick] = []
         var usedCardIDs = Set<String>()
         for (index, slot) in slots.enumerated() {
             let rarity = slot.rarity
-            let fullPool: [CardModel]
-            if let exact = cardsByRarity[rarity], !exact.isEmpty {
-                fullPool = exact
-            } else {
-                // Slot rolled a rarity with no matching cards in this set.
-                // Fall back to any other rare-tier rarity (rank ≥ 2) so the
-                // user doesn't silently get a Common in their rare slot.
-                #if DEBUG
-                print("⚠️ Slot rarity '\(rarity)' has no cards in set \(set.apiID); re-rolling from rare-tier pool")
-                #endif
-                let rareTierPools = cardsByRarity
-                    .filter { CardModel.rarityRank(for: $0.key) >= 2 }
-                    .values
-                fullPool = rareTierPools.randomElement() ?? cardsByRarity["Common"] ?? cards
+            let requestedTier = CardModel.rarityRank(for: rarity)
+
+            // Priority chain for picking a card. Each step filters to unused
+            // cards; first non-empty result wins. **Never reuse a card within
+            // the same pack** — if every step empties out, the slot drops.
+            //
+            //   1. Exact rarity-string match (preferred — "Super Rare" → only Super Rares).
+            //   2. Same rarity tier (covers DT Parallels, Mosaic, Starfoil, etc.).
+            //   3. Adjacent tier (within ±1) — defensive fallback for sets with
+            //      sparse rarity coverage (e.g. JUSH has no Commons, so Common
+            //      slots draw from tier-1 Rares).
+            //   4. Anything left.
+            //
+            // This is what fixes the "JUSH gives 3× A Case for K9" bug: the
+            // old fallback picked a random rarity bucket per slot, then reused
+            // cards when small buckets ran dry. Tier-aware unused-only lookups
+            // make every slot fill from distinct cards.
+            func unused(_ pool: [CardModel]) -> [CardModel] {
+                pool.filter { !usedCardIDs.contains($0.apiID) }
             }
-            let pool = fullPool.filter { !usedCardIDs.contains($0.apiID) }
-            let usablePool = pool.isEmpty ? fullPool : pool
+
+            var candidates = unused(cardsByRarity[rarity] ?? [])
+            if candidates.isEmpty {
+                candidates = unused(cardsByTier[requestedTier] ?? [])
+            }
+            if candidates.isEmpty {
+                let adjacent = cardsByTier.flatMap { tier, list in
+                    abs(tier - requestedTier) <= 1 ? list : []
+                }
+                candidates = unused(adjacent)
+            }
+            if candidates.isEmpty {
+                candidates = unused(cards)
+            }
+
             guard let card = Self.weightedPick(
-                from: usablePool,
+                from: candidates,
                 ownedCardIDs: ownedCardIDs,
                 ownedWeight: ownedWeight
             ) else { continue }
