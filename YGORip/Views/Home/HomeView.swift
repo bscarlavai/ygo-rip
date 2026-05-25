@@ -20,7 +20,7 @@ struct HomeView: View {
     @State private var isSyncing = false
     @State private var syncError: String?
     @State private var shimmerPhase: CGFloat = -1
-    @State private var showCrossPromo = false
+    @State private var crossPromoSibling: SiblingApp?
 
     private let syncService = SetSyncService.shared
 
@@ -141,18 +141,23 @@ struct HomeView: View {
                 withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
                     shimmerPhase = 1
                 }
-                // Cross-promo fires once, on first return to Home after the
-                // user has opened their first pack. Flip `crossPromoSeen`
-                // up front so swipe-to-dismiss also counts (otherwise the
-                // sheet would re-open on next .onAppear).
-                if appState.hasOpenedFirstPack && !appState.crossPromoSeen {
-                    appState.crossPromoSeen = true
-                    showCrossPromo = true
+                // Cross-promo fires after the user has opened their first
+                // pack: each Home appearance picks the first sibling NOT
+                // yet in `crossPromoSeenApps` and shows its modal. Mark as
+                // seen up front so swipe-to-dismiss also counts. New
+                // siblings added to `crossPromoTargets` in a later release
+                // will surface on next launch for existing installs (their
+                // key isn't in the set yet), without re-showing already-
+                // seen targets.
+                if appState.hasOpenedFirstPack,
+                   let next = SiblingApp.crossPromoTargets.first(where: { !appState.isCrossPromoSeen($0.key) }) {
+                    appState.markCrossPromoSeen(next.key)
+                    crossPromoSibling = next
                 }
             }
-            .sheet(isPresented: $showCrossPromo) {
-                CrossPromoModal(sibling: .pokeRip) {
-                    showCrossPromo = false
+            .sheet(item: $crossPromoSibling) { sib in
+                CrossPromoModal(sibling: sib) {
+                    crossPromoSibling = nil
                 }
             }
         }

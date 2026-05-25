@@ -1,7 +1,12 @@
 import SwiftUI
 
 /// Metadata for a sister app we'd like to promote.
-struct SiblingApp {
+struct SiblingApp: Identifiable {
+    /// Stable key used for "have we shown this user this sibling?" tracking
+    /// in `AppState.crossPromoSeenApps`. Must be unique per sibling and
+    /// stable across releases — renaming this string breaks the seen-set
+    /// for already-installed users.
+    let key: String
     let name: String
     let tagline: String
     let blurb: String
@@ -10,34 +15,40 @@ struct SiblingApp {
     let fallbackSymbol: String
     let appStoreID: String
 
+    var id: String { key }
     var appStoreURL: URL? {
         URL(string: "https://apps.apple.com/app/id\(appStoreID)")
     }
 }
 
 extension SiblingApp {
-    /// Sibling currently featured from MTGRip. Drop a `PokeRipIcon` image
-    /// into Assets.xcassets to replace the SF Symbol placeholder.
     static let pokeRip = SiblingApp(
+        key: "pokerip",
         name: "PokeRip",
         tagline: "Rip packs, chase rares.",
-        blurb: "From the makers of MTGRip. Open booster packs from every era, chase Hyper Rares and Secret Rares, and build your dream collection.",
+        blurb: "From the makers of YGORip. Open booster packs from every era, chase Hyper Rares and Secret Rares, and build your dream collection.",
         iconAsset: "PokeRipIcon",
         fallbackSymbol: "sparkles.rectangle.stack.fill",
         appStoreID: "6762006216"
     )
 
-    /// MTGRip sibling — Magic: The Gathering pack-opening simulator from the same dev.
-    /// Drop a `MTGRipIcon` image into Assets.xcassets to replace the SF Symbol placeholder.
-    /// TODO: confirm App Store ID once MTGRip is live (placeholder below).
     static let mtgRip = SiblingApp(
+        key: "mtgrip",
         name: "MTGRip",
         tagline: "Rip packs, chase mythics.",
-        blurb: "From the makers of PokeRip. Open Magic: The Gathering boosters from every era, chase mythics and special-frame rares, and build your dream collection.",
+        blurb: "From the makers of YGORip. Open boosters from every era, chase mythics and special-frame rares, and build your dream collection.",
         iconAsset: "MTGRipIcon",
         fallbackSymbol: "wand.and.stars",
-        appStoreID: "REPLACE_WITH_MTGRIP_APP_STORE_ID"
+        appStoreID: "6770387435"
     )
+
+    /// Sibling apps this app promotes, in priority order. On each Home
+    /// appearance after the user has opened their first pack, the first
+    /// entry not yet in `AppState.crossPromoSeenApps` shows its modal.
+    /// Adding a new sibling here causes it to surface on next launch for
+    /// every install — even users who already saw earlier siblings —
+    /// because the seen-set is per-key.
+    static let crossPromoTargets: [SiblingApp] = [.pokeRip, .mtgRip]
 }
 
 /// One-shot cross-promo sheet, presented to engaged users (i.e. after their

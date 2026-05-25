@@ -25,9 +25,19 @@ final class AppState {
         didSet { UserDefaults.standard.set(hasOpenedFirstPack, forKey: "hasOpenedFirstPack") }
     }
 
-    var crossPromoSeen: Bool {
-        didSet { UserDefaults.standard.set(crossPromoSeen, forKey: "crossPromoSeen") }
+    /// Set of sibling-app `key`s whose cross-promo modal we've already
+    /// shown this user. Replaces a single `crossPromoSeen: Bool` so that
+    /// adding a new sibling to `SiblingApp.crossPromoTargets` after
+    /// release surfaces it for existing installs (the new key isn't in
+    /// the set yet) without re-showing already-seen targets.
+    var crossPromoSeenApps: Set<String> {
+        didSet {
+            UserDefaults.standard.set(Array(crossPromoSeenApps), forKey: "crossPromoSeenApps")
+        }
     }
+
+    func markCrossPromoSeen(_ key: String) { crossPromoSeenApps.insert(key) }
+    func isCrossPromoSeen(_ key: String) -> Bool { crossPromoSeenApps.contains(key) }
 
     var notificationsEnabled: Bool {
         didSet { UserDefaults.standard.set(notificationsEnabled, forKey: "notificationsEnabled") }
@@ -104,7 +114,7 @@ final class AppState {
         self.notificationsEnabled = UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool ?? true
         self.unownedCardBiasEnabled = UserDefaults.standard.object(forKey: "unownedCardBiasEnabled") as? Bool ?? true
         self.hasOpenedFirstPack = UserDefaults.standard.bool(forKey: "hasOpenedFirstPack")
-        self.crossPromoSeen = UserDefaults.standard.bool(forKey: "crossPromoSeen")
+        self.crossPromoSeenApps = Set(UserDefaults.standard.stringArray(forKey: "crossPromoSeenApps") ?? [])
 
         // Calculate packs earned while away
         regenPacks()

@@ -53,6 +53,14 @@ actor SetSyncService {
         //    cascade is manual because PullRecord uses a soft string
         //    reference (cardAPIID) rather than a SwiftData relationship,
         //    so SwiftData won't cascade for us.
+        //
+        //    Safety guard: if records is empty, the bundle either failed to
+        //    load or is malformed; treating "no records" as "delete all
+        //    user data" would nuke the user's collection on any transient
+        //    bundle issue. Skip cleanup entirely — the upsert below also
+        //    becomes a no-op, so this turns syncAllSets into a safe no-op.
+        guard !records.isEmpty else { return }
+
         let bundledCodes = Set(records.map { $0.code })
         let allSets = try context.fetch(FetchDescriptor<SetModel>())
         let staleSetCodes: [String] = allSets.compactMap { bundledCodes.contains($0.apiID) ? nil : $0.apiID }
@@ -120,6 +128,15 @@ actor SetSyncService {
         // recent example — a chase variant that used to be canonical may
         // have flipped back to its base printing, leaving a stale row
         // pointing at the variant). Cascade to PullRecord on string match.
+        //
+        // Safety guard: empty printings would otherwise nuke every
+        // CardModel + PullRecord for this set. The pipeline drops
+        // 0-printing sets entirely (see "Sets with no printings" report
+        // in build_bundle.py) — if a set is still in sets.json but
+        // somehow has zero printings, treat it as a transient bundle
+        // issue rather than authoritative "wipe the user's collection".
+        guard !printings.isEmpty else { return }
+
         let bundledAPIIDs: Set<String> = Set(printings.map { "\(setID):\($0.id)" })
         let existingInSet = try context.fetch(FetchDescriptor<CardModel>(
             predicate: #Predicate { $0.setID == setID }

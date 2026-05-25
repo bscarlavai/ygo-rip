@@ -10,7 +10,7 @@ struct SettingsView: View {
     @State private var showResetSuccess = false
     @State private var showDisclaimerSheet = false
     #if DEBUG
-    @State private var showDebugCrossPromo = false
+    @State private var debugCrossPromoSibling: SiblingApp?
     #endif
 
     var body: some View {
@@ -51,9 +51,9 @@ struct SettingsView: View {
                 disclaimerSheet
             }
             #if DEBUG
-            .sheet(isPresented: $showDebugCrossPromo) {
-                CrossPromoModal(sibling: .pokeRip) {
-                    showDebugCrossPromo = false
+            .sheet(item: $debugCrossPromoSibling) { sib in
+                CrossPromoModal(sibling: sib) {
+                    debugCrossPromoSibling = nil
                 }
             }
             #endif
@@ -377,10 +377,12 @@ struct SettingsView: View {
                 Label("Foil Sandbox", systemImage: "sparkles.rectangle.stack")
             }
 
-            Button {
-                showDebugCrossPromo = true
-            } label: {
-                Label("Show Cross-Promo Banner", systemImage: "megaphone.fill")
+            ForEach(SiblingApp.crossPromoTargets) { sib in
+                Button {
+                    debugCrossPromoSibling = sib
+                } label: {
+                    Label("Cross-Promo: \(sib.name)", systemImage: "megaphone.fill")
+                }
             }
         } header: {
             Text("Debug")
