@@ -517,8 +517,14 @@ def main():
             continue
         printings = printings_by_name.get(name, [])
         if not printings:
+            # YGOPRODeck has set records with `num_of_cards >= 1` whose
+            # cards don't actually reference the set by name (Kaiba's
+            # Collector Box / Yugi's Collector Box are the canonical
+            # offenders — physical merch bundles, not pack products).
+            # No printings means SetDetail would show "1/1 collected" with
+            # an empty checklist and no way to pull anything; just drop.
             sets_no_printings.append((code, name))
-            # Still emit the set record — it just won't have card pulls
+            continue
         record = {
             "code": code,
             "name": name,
