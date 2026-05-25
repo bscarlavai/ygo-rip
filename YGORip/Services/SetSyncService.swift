@@ -18,13 +18,22 @@ actor SetSyncService {
     /// Lazily loaded on first per-set sync.
     private var cardDefs: [Int: BundledCardDef]?
 
-    /// Load all sets from the bundle. Idempotent — only inserts/updates.
+    /// Load all sets from the bundle. Idempotent — inserts, updates, AND
+    /// deletes SetModel rows that no longer appear in `sets.json` (with
+    /// cascade to CardModel + PullRecord). The cascade matters when a
+    /// future bundle drops a set entirely (e.g. a collab discovered after
+    /// release, or a YGOPRODeck `set_code` collision resolved differently).
+    /// Without this, stale rows would linger in user installs forever.
     func syncAllSets(container: ModelContainer) async throws {
         let bundled = try Self.loadBundledSets()
         try await persistSets(bundled, container: container)
     }
 
-    /// Load all cards for one set from the bundle into SwiftData. Idempotent.
+    /// Load all cards for one set from the bundle into SwiftData. Idempotent —
+    /// inserts AND deletes CardModel rows for this set whose printing no
+    /// longer appears in `set-cards-<code>.json` (with cascade to PullRecord).
+    /// This catches per-printing churn (dedup logic changes, deduplicating
+    /// rarity variants, etc.) without needing a full DB wipe.
     func syncCards(forSetID setID: String, container: ModelContainer) async throws {
         let defs = try loadCardDefsIfNeeded()
         let printings = try Self.loadBundledPrintings(setID: setID)
@@ -37,6 +46,32 @@ actor SetSyncService {
         let context = ModelContext(container)
         context.autosaveEnabled = false
 
+        // 1. Cleanup: drop SetModel rows whose set_code is no longer in
+        //    the bundle (set removed entirely between bundles — collab
+        //    discovered late, code-collision dedup picked a different
+        //    winner, etc.), with cascade to CardModel + PullRecord. The
+        //    cascade is manual because PullRecord uses a soft string
+        //    reference (cardAPIID) rather than a SwiftData relationship,
+        //    so SwiftData won't cascade for us.
+        let bundledCodes = Set(records.map { $0.code })
+        let allSets = try context.fetch(FetchDescriptor<SetModel>())
+        let staleSetCodes: [String] = allSets.compactMap { bundledCodes.contains($0.apiID) ? nil : $0.apiID }
+        if !staleSetCodes.isEmpty {
+            for set in allSets where !bundledCodes.contains(set.apiID) {
+                context.delete(set)
+            }
+            let staleCodeSet = Set(staleSetCodes)
+            let staleCards = try context.fetch(FetchDescriptor<CardModel>(
+                predicate: #Predicate { staleCodeSet.contains($0.setID) }
+            ))
+            for c in staleCards { context.delete(c) }
+            let stalePulls = try context.fetch(FetchDescriptor<PullRecord>(
+                predicate: #Predicate { staleCodeSet.contains($0.setID) }
+            ))
+            for p in stalePulls { context.delete(p) }
+        }
+
+        // 2. Upsert: insert new sets, update changed fields on existing.
         for record in records {
             let code = record.code
             let descriptor = FetchDescriptor<SetModel>(
@@ -79,6 +114,26 @@ actor SetSyncService {
     ) async throws {
         let context = ModelContext(container)
         context.autosaveEnabled = false
+
+        // Cleanup: drop CardModel rows for this set whose printing is no
+        // longer in the bundle (the dedup-by-lowest-rarity change is a
+        // recent example — a chase variant that used to be canonical may
+        // have flipped back to its base printing, leaving a stale row
+        // pointing at the variant). Cascade to PullRecord on string match.
+        let bundledAPIIDs: Set<String> = Set(printings.map { "\(setID):\($0.id)" })
+        let existingInSet = try context.fetch(FetchDescriptor<CardModel>(
+            predicate: #Predicate { $0.setID == setID }
+        ))
+        let staleCardAPIIDs: Set<String> = Set(existingInSet.compactMap { bundledAPIIDs.contains($0.apiID) ? nil : $0.apiID })
+        if !staleCardAPIIDs.isEmpty {
+            for c in existingInSet where !bundledAPIIDs.contains(c.apiID) {
+                context.delete(c)
+            }
+            let stalePulls = try context.fetch(FetchDescriptor<PullRecord>(
+                predicate: #Predicate { staleCardAPIIDs.contains($0.cardAPIID) }
+            ))
+            for p in stalePulls { context.delete(p) }
+        }
 
         for printing in printings {
             let apiID = "\(setID):\(printing.id)"

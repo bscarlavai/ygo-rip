@@ -131,11 +131,51 @@ When new sets are added by Konami:
   with 0 printings either have YGOPRODeck data gaps (older starter decks) or
   are corner cases we should drop.
 
-### 7. SwiftData bundle-bump cleanup (deferred TODO)
-`SetSyncService` is insert-only — bundle changes that remove cards leave
-stale `CardModel` rows in user installs. Acceptable for now (`Reset
-Collection` in Settings nukes everything), but a "bundle schema version"
-check that wipes & re-syncs CardModels on bump would be safer for prod.
+### 7. SwiftData bundle-bump cleanup
+`SetSyncService` is **not** insert-only — both sync paths garbage-collect
+stale rows before upserting. The cleanup is lazy (per-touch) rather than
+launch-time:
+- `syncAllSets` (HomeView launch) drops `SetModel` rows whose `apiID` is
+  no longer in `sets.json`, with manual cascade to `CardModel` (`setID`
+  match) and `PullRecord` (`setID` match). The cascade is manual because
+  `PullRecord` references via soft string IDs, not a SwiftData
+  relationship.
+- `syncCards(forSetID:)` (SetDetail open) drops `CardModel` rows for
+  that set whose `apiID` is no longer in `set-cards-<code>.json`, with
+  cascade to `PullRecord` (`cardAPIID` match).
+
+This covers two kinds of drift: a whole set disappearing (collab found
+late, code-collision dedup picks a different winner) and per-printing
+churn (dedup logic changes, rarity-variant collapse, etc.). No version
+field needed — set-membership is the comparison.
+
+Pre-1.0, this is mostly defensive; once users are installed and
+collecting, it keeps "Reset Collection" from being the only escape
+hatch.
+
+### 8. Chase-variant tracking (deferred)
+Modern YGO sets print the same card at multiple rarities under the same
+English numbering — Diabellstar at AGOV-EN006 ships as both Secret Rare
+and Quarter Century Secret Rare; same set_code, same image. The
+pipeline currently dedupes to the lowest rarity (base printing) so the
+pull engine's normal slots can find every card. Chase variants (QCSR /
+Starlight / Collector's / Prismatic / Ghost) are intentionally absent
+from the pool until two things land together:
+1. **Foil tier extensions**: `FoilTreatment` is 5 tiers today; YGO has
+   9–10 visually distinct real-world rarities. Distinguishing QCSR
+   from Secret needs new shader features (25th-anniversary stamp
+   overlay, starlight particle layer) — not just new uniform values.
+2. **Per-variant slot odds**: `PullRateEngine`'s era configs would
+   need explicit chase-variant slots with low odds (~1:24 box) and
+   the engine would need to pick which rarity of a given card to
+   pull.
+
+The data model is ready to extend: track `pulledRarities: Set<String>`
+on each `(CardModel, set)` tuple à la MTG's old `isFoil` flag, so the
+checklist stays one-row-per-card and the collector aspect surfaces in
+card inspect or via rarity pips. Don't ship variants without the foil
+tiers — pulling a "QCSR" that renders identically to a Secret undercuts
+the chase moment more than collapsing them does.
 
 ## Architecture
 
