@@ -512,6 +512,163 @@ def fetch_set_logo(set_code):
 
 
 # -----------------------------------------------------------------------------
+# Bundle validator
+# -----------------------------------------------------------------------------
+# Reads the freshly-written bundle off disk and checks for orphan-shaped
+# problems that would surface as user-visible bugs (empty checklists,
+# unpullable cards, missing hero art, broken SwiftData uniqueness). Hard
+# errors fail the build; soft issues print a warning.
+#
+# The expensive raw-fetch and JSON-write phases are already done by the
+# time this runs, so a failed validation lets you re-emit-and-fix without
+# refetching. Run standalone via `python3 build_bundle.py --validate-only`.
+
+def validate_bundle():
+    """Audit the on-disk bundle. Returns True on pass, False on hard fail."""
+    print(f"\n=== Validating bundle ===", file=sys.stderr)
+
+    sets_path = OUT / "sets.json"
+    cards_path = OUT / "cards.json"
+    if not sets_path.exists() or not cards_path.exists():
+        print(f"  ERROR: sets.json or cards.json missing", file=sys.stderr)
+        return False
+
+    sets = json.loads(sets_path.read_text())
+    cards = json.loads(cards_path.read_text())
+    card_ids = {c["id"] for c in cards}
+
+    # Map every shipped set_code → its set record. Used for set-cards-*
+    # orphan detection.
+    sets_by_code = {s["code"]: s for s in sets}
+
+    errors = []   # hard fails — abort build
+    warnings = [] # soft issues — print and continue
+
+    # --- (1) Duplicate set codes in sets.json -----------------------------
+    # SetModel.apiID is `@Attribute(.unique)` — two records sharing a code
+    # would crash SwiftData on insert. The pipeline already dedupes via
+    # `sets_by_code` upstream, but this catches regressions in that logic.
+    seen_codes = set()
+    for s in sets:
+        if s["code"] in seen_codes:
+            errors.append(f"Duplicate set code in sets.json: {s['code']}")
+        seen_codes.add(s["code"])
+
+    # --- (2) Duplicate card IDs in cards.json -----------------------------
+    # CardModel.apiID is also unique; same shape of regression risk.
+    seen_card_ids = set()
+    for c in cards:
+        if c["id"] in seen_card_ids:
+            errors.append(f"Duplicate card id in cards.json: {c['id']}")
+        seen_card_ids.add(c["id"])
+
+    # --- (3) Sets without printings ---------------------------------------
+    # A set in sets.json with no set-cards-<code>.json is the Kaiba's
+    # Collector Box bug — SetDetail shows "1/1" with an empty checklist.
+    # build_bundle filters these out upstream; this is the safety net.
+    sets_missing_printings = []
+    for s in sets:
+        if not (OUT / f"set-cards-{s['code']}.json").exists():
+            sets_missing_printings.append(s["code"])
+    if sets_missing_printings:
+        errors.append(
+            f"{len(sets_missing_printings)} sets in sets.json have no set-cards file: "
+            f"{', '.join(sets_missing_printings[:5])}{'...' if len(sets_missing_printings) > 5 else ''}"
+        )
+
+    # --- (4) Orphan set-cards files ---------------------------------------
+    # The inverse: per-set printing files for codes not in sets.json. The
+    # build wipes these at the start of every run, so this should be empty
+    # — if it isn't, the wipe didn't run or sets.json regressed.
+    orphan_set_cards = []
+    for f in OUT.glob("set-cards-*.json"):
+        code = f.stem[len("set-cards-"):]
+        if code not in sets_by_code:
+            orphan_set_cards.append(code)
+    if orphan_set_cards:
+        errors.append(
+            f"{len(orphan_set_cards)} orphan set-cards files (no matching set in sets.json): "
+            f"{', '.join(sorted(orphan_set_cards)[:5])}"
+        )
+
+    # --- (5) Unresolvable card IDs in printings ---------------------------
+    # Every `id` in set-cards-<code>.json must resolve to an entry in
+    # cards.json. A miss means the app would pull a printing pointing at a
+    # card it can't render.
+    unresolved_total = 0
+    unresolved_examples = []
+    total_printings = 0
+    for code, s in sets_by_code.items():
+        path = OUT / f"set-cards-{code}.json"
+        if not path.exists():
+            continue
+        printings = json.loads(path.read_text())
+        total_printings += len(printings)
+        for p in printings:
+            if p["id"] not in card_ids:
+                unresolved_total += 1
+                if len(unresolved_examples) < 5:
+                    unresolved_examples.append(f"{code}:{p['code']}({p['id']})")
+    if unresolved_total > 0:
+        errors.append(
+            f"{unresolved_total} printings reference card IDs missing from cards.json: "
+            f"{', '.join(unresolved_examples)}"
+        )
+
+    # --- (6) totalCards mismatch ------------------------------------------
+    # sets.json[i].totalCards drives the collection-progress denominator.
+    # If the actual printings count differs, the user sees a wrong fraction
+    # (or "N/M with M < N" which looks like a bug). Soft warning — not all
+    # mismatches are bugs (printings can include variants the set total
+    # excludes, and YGOPRODeck's num_of_cards is sometimes stale).
+    for s in sets:
+        path = OUT / f"set-cards-{s['code']}.json"
+        if not path.exists():
+            continue
+        actual = len(json.loads(path.read_text()))
+        declared = s.get("totalCards", 0)
+        if actual != declared:
+            warnings.append(
+                f"totalCards mismatch in {s['code']}: declared={declared}, actual printings={actual}"
+            )
+
+    # --- (7) featuredCardID resolves --------------------------------------
+    # SetGridCard / SetDetail hero rely on this. Falling back to the YGO
+    # logo isn't catastrophic, but if many sets miss it we want to know.
+    missing_featured = []
+    for s in sets:
+        fid = s.get("featuredCardID")
+        if fid is None:
+            missing_featured.append(s["code"])
+        elif fid not in card_ids:
+            errors.append(f"featuredCardID {fid} for set {s['code']} not in cards.json")
+    if missing_featured:
+        warnings.append(
+            f"{len(missing_featured)} sets have no featuredCardID (will fall back to YGO logo): "
+            f"{', '.join(missing_featured[:5])}{'...' if len(missing_featured) > 5 else ''}"
+        )
+
+    # --- Report -----------------------------------------------------------
+    print(f"  Sets:               {len(sets)}", file=sys.stderr)
+    print(f"  Cards in index:     {len(cards)}", file=sys.stderr)
+    print(f"  Printings checked:  {total_printings}", file=sys.stderr)
+
+    for w in warnings[:20]:
+        print(f"  WARN: {w}", file=sys.stderr)
+    if len(warnings) > 20:
+        print(f"  ... and {len(warnings) - 20} more warnings", file=sys.stderr)
+
+    for e in errors:
+        print(f"  FAIL: {e}", file=sys.stderr)
+
+    if errors:
+        print(f"\n  VALIDATION FAILED — {len(errors)} hard error(s), {len(warnings)} warning(s)", file=sys.stderr)
+        return False
+    print(f"\n  Validation OK ({len(warnings)} warning(s))", file=sys.stderr)
+    return True
+
+
+# -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
 
@@ -520,7 +677,12 @@ def main():
     ap.add_argument("--no-logos", action="store_true", help="Skip set-logo scrape (fast iteration)")
     ap.add_argument("--sets-only", action="store_true", help="Only rebuild sets.json (assumes raw/ is populated)")
     ap.add_argument("--force-refresh", action="store_true", help="Re-download YGOPRODeck dumps even if cached")
+    ap.add_argument("--validate-only", action="store_true", help="Skip build, just audit the on-disk bundle")
     args = ap.parse_args()
+
+    if args.validate_only:
+        ok = validate_bundle()
+        sys.exit(0 if ok else 1)
 
     # 1. Fetch raw dumps
     sets_path = fetch_sets() if not args.force_refresh else fetch(f"{YGOPRODECK_BASE}/cardsets.php", RAW / "cardsets.json", force=True)
@@ -690,6 +852,10 @@ def main():
         print(f"\n  Collab/crossover sets blocked:", file=sys.stderr)
         for code, name in collab_skipped:
             print(f"    {code}: {name}", file=sys.stderr)
+
+    # Final audit — non-zero exit if anything orphan-shaped slipped through.
+    if not validate_bundle():
+        sys.exit(1)
 
 
 if __name__ == "__main__":
