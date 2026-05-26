@@ -192,7 +192,7 @@ struct SettingsView: View {
 
     // MARK: - More from Lavai Labs
 
-    private let siblingApps: [SiblingApp] = [.pokeRip, .mtgRip]
+    private let siblingApps: [SiblingApp] = [.mtgRip, .pokeRip]
 
     private var moreFromLavaiLabsSection: some View {
         Section {
