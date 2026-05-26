@@ -1082,8 +1082,11 @@ struct PackOpeningView: View {
             nextTier = 0
         }
 
-        // Initial swipe haptic — light tap for the gesture itself
+        // Initial swipe haptic + sound — both are gesture acknowledgment,
+        // fire together. SoundEffectService uses .ambient audio session
+        // so it mixes with whatever the user is listening to.
         hapticLight += 1
+        SoundEffectService.shared.play(.swipe)
 
         // Animate current card off screen AND fade residual effects with it,
         // so the "sausage being made" (rays, twinkles, backdrop) isn't visible

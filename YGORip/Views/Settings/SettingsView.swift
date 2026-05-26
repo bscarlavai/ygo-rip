@@ -147,6 +147,9 @@ struct SettingsView: View {
             Toggle(isOn: $state.hapticsEnabled) {
                 Label("Haptic Feedback", systemImage: "hand.tap.fill")
             }
+            Toggle(isOn: $state.soundEffectsEnabled) {
+                Label("Sound Effects", systemImage: "speaker.wave.2.fill")
+            }
             Toggle(isOn: $state.notificationsEnabled) {
                 Label("Pack Notifications", systemImage: "bell.fill")
             }

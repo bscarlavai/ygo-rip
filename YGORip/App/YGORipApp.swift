@@ -34,6 +34,7 @@ struct YGORipApp: App {
                 .onAppear {
                     storeKit.appState = appState
                     storeKit.configure()
+                    SoundEffectService.shared.appState = appState
                     if !hasCompletedOnboarding {
                         showOnboarding = true
                     }

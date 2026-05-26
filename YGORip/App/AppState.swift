@@ -47,6 +47,14 @@ final class AppState {
         didSet { UserDefaults.standard.set(unownedCardBiasEnabled, forKey: "unownedCardBiasEnabled") }
     }
 
+    /// Master toggle for in-app sound effects (card-swipe sound, etc.).
+    /// Independent of the iOS Silent switch — those interactions are
+    /// handled by the `.ambient` audio session category. Read by
+    /// `SoundEffectService.play(_:)` via its weak `appState` reference.
+    var soundEffectsEnabled: Bool {
+        didSet { UserDefaults.standard.set(soundEffectsEnabled, forKey: "soundEffectsEnabled") }
+    }
+
     // MARK: - Pack Regen System
 
     static let maxPacks = 5
@@ -113,6 +121,7 @@ final class AppState {
         self.idleHoloShimmerEnabled = UserDefaults.standard.object(forKey: "idleHoloShimmerEnabled") as? Bool ?? true
         self.notificationsEnabled = UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool ?? true
         self.unownedCardBiasEnabled = UserDefaults.standard.object(forKey: "unownedCardBiasEnabled") as? Bool ?? true
+        self.soundEffectsEnabled = UserDefaults.standard.object(forKey: "soundEffectsEnabled") as? Bool ?? true
         self.hasOpenedFirstPack = UserDefaults.standard.bool(forKey: "hasOpenedFirstPack")
         self.crossPromoSeenApps = Set(UserDefaults.standard.stringArray(forKey: "crossPromoSeenApps") ?? [])
 
