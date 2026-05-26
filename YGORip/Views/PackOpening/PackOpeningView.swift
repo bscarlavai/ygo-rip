@@ -174,14 +174,27 @@ struct PackOpeningView: View {
             // Stage the next pack as soon as the user reaches the summary,
             // so "Open Another" can reuse the prefetched data instead of
             // running pack generation + image download from scratch.
-            if new == .summary, appState.canOpenPack {
-                PackPrefetcher.shared.prefetch(
-                    set: set,
-                    cards: cards,
-                    modelContext: modelContext,
-                    ownedCardIDs: collectionStats.ownedCardIDs(forSet: set.apiID),
-                    biasUnownedCards: appState.unownedCardBiasEnabled
-                )
+            //
+            // Also: refresh prices for the just-opened pack so Stats'
+            // "Collection Value" reflects today's market without the user
+            // having to tap into each card individually. Run after we hit
+            // .summary so the parallel API calls don't compete with the
+            // pack's image downloads. Mirrors poke-rip's PackOpeningView.
+            if new == .summary {
+                if let pulled = preloadedPack {
+                    Task { @MainActor in
+                        await Self.refreshPricesForPulledCards(pulled, modelContext: modelContext)
+                    }
+                }
+                if appState.canOpenPack {
+                    PackPrefetcher.shared.prefetch(
+                        set: set,
+                        cards: cards,
+                        modelContext: modelContext,
+                        ownedCardIDs: collectionStats.ownedCardIDs(forSet: set.apiID),
+                        biasUnownedCards: appState.unownedCardBiasEnabled
+                    )
+                }
             }
         }
         .onChange(of: passiveMotionSource) { _, _ in
@@ -922,6 +935,52 @@ struct PackOpeningView: View {
             // card-reading time instead of swallowing the flip animation.
             savePackIfNeeded()
         }
+    }
+
+    /// Batch-refresh live YGOPRODeck prices for the just-pulled cards.
+    /// Triggered on entry to the `.summary` phase so Stats' "Collection
+    /// Value" reflects today's market without the user having to inspect
+    /// each card individually. Skips cards whose price is already fresh
+    /// (<24h old); ones that fail to refresh keep their bundled price
+    /// (better stale than missing).
+    @MainActor
+    private static func refreshPricesForPulledCards(_ pulled: [PulledCard], modelContext: ModelContext) async {
+        let needsRefresh = pulled.filter { pulled in
+            let card = pulled.model
+            if card.priceMarket == nil { return true }
+            if let last = card.priceLastUpdated, last.timeIntervalSinceNow < -86400 { return true }
+            return false
+        }
+        guard !needsRefresh.isEmpty else { return }
+
+        let api = YGOPRODeckService()
+        var priced: [Int: Double] = [:]
+        await withTaskGroup(of: (Int, Double)?.self) { group in
+            for pulled in needsRefresh {
+                let ygoID = pulled.model.ygoID
+                group.addTask {
+                    guard let card = try? await api.fetchCard(id: ygoID),
+                          let price = card.priceUSD else { return nil }
+                    return (ygoID, price)
+                }
+            }
+            for await item in group {
+                if let (id, price) = item { priced[id] = price }
+            }
+        }
+
+        let now = Date()
+        for pulled in needsRefresh {
+            // Always update the timestamp — for cards with no API price we
+            // still don't want to retry every summary visit.
+            pulled.model.priceLastUpdated = now
+            if let market = priced[pulled.model.ygoID] {
+                pulled.model.priceMarket = market
+                // YGOPRODeck doesn't expose a separate "low" — reuse market.
+                pulled.model.priceLow = market
+            }
+        }
+        try? modelContext.save()
     }
 
     /// Persist this pack's PullRecords and decrement the pack counter.
