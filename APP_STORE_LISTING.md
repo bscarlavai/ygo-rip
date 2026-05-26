@@ -79,12 +79,10 @@ Live market prices on every card. See what your pulls are worth, sort by value, 
 STATS & HISTORY
 Pull history with timestamps. Rarity breakdown. Luckiest pulls. Set completion percentage. Watch your collection grow over time.
 
-SUPPORT YGORIP - UNLOCK EVERYTHING
-Three tip tiers, pick what feels right. Any tip unlocks all premium features:
+SUPPORT YGORIP - UNLOCK UNLIMITED RIPS
+Three tip tiers, pick what feels right. Any tip unlocks unlimited pack opens — no waiting on the regen timer.
 
-• Unlimited pack opens
-• Premium animations — foil shimmer, particle effects
-• Gyroscope-reactive foil tilt on card inspect
+Every other feature — foil shimmer, particles, gyro tilt, full collection tracking, stats — is free for everyone. The tip is for unlimited access and to support development.
 
 No subscriptions. One tip, yours forever.
 
