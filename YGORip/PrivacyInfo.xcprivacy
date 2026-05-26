@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- We don't track users across apps/websites and we don't pass any
+         identifiers to data brokers. RevenueCat assigns an anonymous
+         AppUserID for entitlement lookups; per Apple's definition that
+         doesn't count as tracking. -->
+    <key>NSPrivacyTracking</key>
+    <false/>
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+    <!-- All collection / linking is on-device only. RevenueCat collects
+         purchase identifiers for entitlement validation; that's declared
+         in RevenueCat's own PrivacyInfo.xcprivacy (which Xcode merges
+         with this one at archive time). Nothing else leaves the device. -->
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+    <!-- Required-reason API declarations. Each entry pairs an API
+         category with one of Apple's pre-approved reason codes (see
+         https://developer.apple.com/documentation/bundleresources/describing_use_of_required_reason_api). -->
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <!-- UserDefaults: AppState reads/writes app-only flags
+             (cross-promo seen set, settings toggles, pack regen
+             timestamps, etc.). Reason CA92.1: "Declare this reason to
+             access user defaults to read and write information that is
+             only accessible to the app itself." -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+        <!-- FileTimestamp: triggered by URLCache (image cache) inside
+             ImageCacheService — Foundation tracks file modification
+             timestamps for cache eviction. Reason 0A2A.1: "Access the
+             timestamps, size, or other metadata of files inside the
+             app container, app group container, or the app's CloudKit
+             container." -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>0A2A.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

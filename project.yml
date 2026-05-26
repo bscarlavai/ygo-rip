@@ -34,6 +34,7 @@ targets:
     resources:
       - path: YGORip/Resources/Assets.xcassets
       - path: YGORip/Resources/YGORip.storekit
+      - path: YGORip/PrivacyInfo.xcprivacy
       # Folder reference: Xcode bundles the whole tree at build time without
       # enumerating individual files at project-generation time. Important
       # because the logo-scrape pipeline adds files to set-logos/ on its
