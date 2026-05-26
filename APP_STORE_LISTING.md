@@ -13,15 +13,16 @@ tcg,booster,opener,collection,trading,card,pull,foil,binder,rip,duel,simulator,f
   Title (28 chars): "Card Pack Simulator" captures core genre searches.
   Mirrors PokeRip / MTGRip naming convention. No trademark wordmark in
   title. "YGORip" is the unique brand. ("YGO" abbreviation is not
-  protected, but stays clear of Konami's "Yu-Gi-Oh!" wordmark.)
+  protected, but the brand stays clear of the franchise wordmark.)
 
   Subtitle (27 chars): Same subtitle as PokeRip / MTGRip — consistent
   "Rip Network" branding. "Rip Booster Packs" is the core action +
   indexes booster searches.
 
-  Keywords (95 chars): trademark-clean (no "yugioh", "yu-gi-oh", "yugi",
-  "konami", character names, or archetype names like "blue-eyes" or
-  "dark magician" — all protected). Every word unique from title/subtitle.
+  Keywords (95 chars): trademark-clean — no franchise wordmarks,
+  publisher names, character names, or archetype names (all protected
+  and would trigger trademark reviews). Every word unique from
+  title/subtitle.
   Words already in title/subtitle:
     ygorip, card, pack, simulator, rip, booster, packs, collect
 
@@ -130,7 +131,7 @@ Source files in `marketing/screenshots/` (1320×2868, iPhone 17 Pro Max native).
 - **Primary Category**: Games
 - **Secondary Category**: Entertainment
 - **Game Subcategories**: Card, Simulation
-- **Age Rating**: 12+ (Infrequent/Mild Cartoon or Fantasy Violence, Infrequent/Mild Horror/Fear Themes — matches Konami's own Yu-Gi-Oh! Master Duel rating)
+- **Age Rating**: 12+ (Infrequent/Mild Cartoon or Fantasy Violence, Infrequent/Mild Horror/Fear Themes — matches the publisher's own official mobile card-game app rating)
 - **Pricing**: Free with In-App Purchases
 - **In-App Purchase Names**: "Supporter Tip", "Super Supporter Tip", "Legendary Supporter Tip"
 - **Privacy**: Data Not Collected (everything on-device; RevenueCat uses anonymous IDs for IAP entitlements only)
