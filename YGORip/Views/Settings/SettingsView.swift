@@ -188,7 +188,7 @@ struct SettingsView: View {
 
     // MARK: - Support
 
-    private let appStoreID = "6770387435"
+    private let appStoreID = "6773177746"
 
     // MARK: - More from Lavai Labs
 

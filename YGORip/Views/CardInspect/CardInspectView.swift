@@ -291,46 +291,32 @@ struct CardInspectView: View {
         }
     }
 
-    // MARK: - Affiliate URLs
-
-    // TCGPlayer affiliate uses Impact redirect: {impactURL}?u={encodedTCGPlayerURL}&subId1=ygorip
-    // TODO: Replace with your Impact affiliate URL after TCGPlayer approval
-    private static let tcgPlayerImpactURL = "REPLACE_WITH_IMPACT_AFFILIATE_URL"
-
-    // TODO: Replace with your eBay Partner Network campaign ID
-    private static let ebayCampaignID = "REPLACE_EBAY_CAMPAIGN_ID"
+    // MARK: - Marketplace URLs
+    //
+    // Plain TCGPlayer + eBay search links. No affiliate wrappers — TCGPlayer
+    // declined the affiliate application; eBay Partner Network hasn't been
+    // applied for. If/when an affiliate program is approved, wrap these URLs
+    // in the appropriate redirect.
 
     private var tcgPlayerURL: URL? {
         // Prefer API-provided direct URL, fall back to search.
         // YGOPRODeck doesn't return TCGPlayer URLs, so `card.tcgPlayerURL` is
         // always nil in practice today — left in for forward-compat if a
         // future data source provides per-printing TCGPlayer links.
-        let directURL = card.tcgPlayerURL
+        if let direct = card.tcgPlayerURL { return URL(string: direct) }
         let searchQuery = "\(card.name) \(setName) \(card.number)"
             .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let fallbackURL = "https://www.tcgplayer.com/search/yugioh/product?q=\(searchQuery)&view=grid&productLineName=yugioh"
-        let tcgURL = directURL ?? fallbackURL
-
-        // If affiliate URL is configured, wrap in Impact redirect
-        if Self.tcgPlayerImpactURL.hasPrefix("http"),
-           let encodedTCG = tcgURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
-            return URL(string: "\(Self.tcgPlayerImpactURL)?u=\(encodedTCG)&subId1=ygorip")
-        }
-
-        // Fallback: direct link (no affiliate revenue but still useful)
-        return URL(string: tcgURL)
+        return URL(string: "https://www.tcgplayer.com/search/yugioh/product?q=\(searchQuery)&view=grid&productLineName=yugioh")
     }
 
     private var ebayURL: URL? {
-        // Include "yu-gi-oh" + card name + set + collector number for precise results
-        // e.g., "yu-gi-oh Dark Magician LOB-EN005" — narrows past unrelated listings.
-        // Drop the category path (183454 was MTG-specific in the inherited code)
-        // and rely on the keyword filter instead — eBay's relevance ranking handles
-        // it across categories.
+        // Include "yu-gi-oh" + card name + set + collector number for precise
+        // results, e.g. "yu-gi-oh Dark Magician LOB-EN005". eBay's relevance
+        // ranking handles category selection across keyword matches.
         let query = "yu-gi-oh \(card.name) \(setName) \(card.number)"
             .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         // BIN only, sorted by price low→high.
-        return URL(string: "https://www.ebay.com/sch/i.html?_nkw=\(query)&LH_BIN=1&_sop=15&mkcid=1&mkrid=711-53200-19255-0&campid=\(Self.ebayCampaignID)")
+        return URL(string: "https://www.ebay.com/sch/i.html?_nkw=\(query)&LH_BIN=1&_sop=15")
     }
 
     // MARK: - Price Refresh
