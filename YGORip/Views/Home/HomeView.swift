@@ -20,7 +20,8 @@ struct HomeView: View {
     @State private var isSyncing = false
     @State private var syncError: String?
     @State private var shimmerPhase: CGFloat = -1
-    @State private var crossPromoSibling: SiblingApp?
+    @State private var crossPromoSiblings: [SiblingApp] = []
+    @State private var showCrossPromo = false
 
     private let syncService = SetSyncService.shared
 
@@ -153,22 +154,23 @@ struct HomeView: View {
                     shimmerPhase = 1
                 }
                 // Cross-promo fires after the user has opened their first
-                // pack: each Home appearance picks the first sibling NOT
-                // yet in `crossPromoSeenApps` and shows its modal. Mark as
-                // seen up front so swipe-to-dismiss also counts. New
-                // siblings added to `crossPromoTargets` in a later release
-                // will surface on next launch for existing installs (their
-                // key isn't in the set yet), without re-showing already-
-                // seen targets.
-                if appState.hasOpenedFirstPack,
-                   let next = SiblingApp.crossPromoTargets.first(where: { !appState.isCrossPromoSeen($0.key) }) {
-                    appState.markCrossPromoSeen(next.key)
-                    crossPromoSibling = next
-                }
+                // pack: each Home appearance gathers every sibling NOT
+                // yet in `crossPromoSeenApps` and shows them all in a
+                // single modal. Mark every shown sibling as seen up front
+                // so swipe/X dismiss also counts. When a future release
+                // adds a new sibling, the next Home appearance fires the
+                // modal again with just the unseen ones (single-item or
+                // multi-item list as appropriate).
+                guard appState.hasOpenedFirstPack else { return }
+                let unseen = SiblingApp.crossPromoTargets.filter { !appState.isCrossPromoSeen($0.key) }
+                guard !unseen.isEmpty else { return }
+                unseen.forEach { appState.markCrossPromoSeen($0.key) }
+                crossPromoSiblings = unseen
+                showCrossPromo = true
             }
-            .sheet(item: $crossPromoSibling) { sib in
-                CrossPromoModal(sibling: sib) {
-                    crossPromoSibling = nil
+            .sheet(isPresented: $showCrossPromo) {
+                CrossPromoModal(siblings: crossPromoSiblings) {
+                    showCrossPromo = false
                 }
             }
         }

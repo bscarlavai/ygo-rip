@@ -81,6 +81,29 @@ final class CollectionStats {
     /// Most recent refresh time. Diagnostic.
     private(set) var lastRefreshed: Date?
 
+    // MARK: - Reset
+
+    /// Clear every published aggregate to the empty-collection state.
+    /// Called from Settings → Reset Collection alongside the SwiftData
+    /// row deletion. Without this, views observing `CollectionStats`
+    /// keep showing pre-reset counts in memory until the app is
+    /// killed and relaunched (which is what re-initializes the
+    /// aggregates from a now-empty database).
+    func reset() {
+        pullCountByCardID = [:]
+        pullDatesByCardID = [:]
+        rarityCounts = [:]
+        ownedUniqueBySet = [:]
+        ownedCardIDsBySet = [:]
+        packsOpenedBySet = [:]
+        totalPulls = 0
+        // priceRefreshTick keeps its current value — observers use it
+        // strictly as a change signal, not a meaningful count.
+        // hasLoadedInitial stays true: we just have an authoritative
+        // empty snapshot, not a "haven't loaded yet" state.
+        lastRefreshed = Date()
+    }
+
     // MARK: - Internal
 
     private var refreshTask: Task<Void, Never>?

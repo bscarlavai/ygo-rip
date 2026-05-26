@@ -43,25 +43,107 @@ extension SiblingApp {
     )
 
     /// Sibling apps this app promotes, in priority order. On each Home
-    /// appearance after the user has opened their first pack, the first
-    /// entry not yet in `AppState.crossPromoSeenApps` shows its modal.
-    /// Adding a new sibling here causes it to surface on next launch for
-    /// every install — even users who already saw earlier siblings —
-    /// because the seen-set is per-key.
+    /// appearance after the user has opened their first pack, every
+    /// entry not yet in `AppState.crossPromoSeenApps` is shown together
+    /// in a single `CrossPromoModal`. Adding a new sibling here causes
+    /// it to surface in the next modal for every existing install (the
+    /// new key isn't in their seen-set yet) without re-showing siblings
+    /// they've already dismissed.
     static let crossPromoTargets: [SiblingApp] = [.pokeRip, .mtgRip]
 }
 
-/// One-shot cross-promo sheet, presented to engaged users (i.e. after their
-/// first pack open). Dismiss → flips `AppState.crossPromoSeen` so it never
-/// fires again. A permanent link lives in Settings for later discovery.
+/// "More from Lavai Labs" sheet — surfaces every sibling app the user
+/// hasn't yet dismissed. Shown at most once per "batch of unseen
+/// siblings": fires after first pack open with all currently-unseen
+/// targets; on dismiss all of them get marked seen. When a future
+/// release adds a new sibling, the next launch fires the modal again
+/// with just that new sibling. Each row is a self-contained App Store
+/// link; tapping any row marks all displayed siblings as seen and
+/// closes the sheet.
 struct CrossPromoModal: View {
-    let sibling: SiblingApp
+    let siblings: [SiblingApp]
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(spacing: Theme.spacingLG) {
-            Spacer(minLength: 24)
+        VStack(spacing: 0) {
+            // Top spacer accommodates the X close overlay.
+            Spacer(minLength: 32)
 
+            Text("More from Lavai Labs")
+                .font(.largeTitle.weight(.bold))
+                .foregroundStyle(Theme.primaryText)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Theme.spacingLG)
+
+            Spacer(minLength: Theme.spacingLG)
+
+            ScrollView {
+                VStack(spacing: Theme.spacingMD) {
+                    ForEach(siblings) { sib in
+                        SiblingRow(sibling: sib)
+                    }
+                }
+                .padding(.horizontal, Theme.spacingLG)
+            }
+
+            Spacer(minLength: Theme.spacingMD)
+
+            // Matches the translucent-pill "Reveal All" style used in
+            // PackOpeningView so the dismiss action reads with the same
+            // visual weight as the app's other primary-action buttons.
+            Button(action: onDismiss) {
+                Text("Done")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Capsule().fill(.white.opacity(0.15)))
+                    .overlay(Capsule().stroke(.white.opacity(0.25), lineWidth: 0.5))
+                    .contentShape(Capsule())
+            }
+            .padding(.horizontal, 32)
+            .padding(.bottom, Theme.spacingMD)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.background)
+        .overlay(alignment: .topTrailing) {
+            Button(action: onDismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title2)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.white.opacity(0.5))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .padding(.trailing, 8)
+            .padding(.top, 8)
+        }
+    }
+
+}
+
+/// One row in the cross-promo modal — icon, name, tagline, Get button.
+/// The whole row is a tap target that opens the App Store; the Get
+/// button is visual affordance only (it inherits the row's tap).
+private struct SiblingRow: View {
+    let sibling: SiblingApp
+
+    var body: some View {
+        Group {
+            if let url = sibling.appStoreURL {
+                // Tapping a row navigates to the App Store but doesn't
+                // dismiss the modal — when the user returns to the app,
+                // the modal is still up so they can tap other siblings
+                // from the list.
+                Link(destination: url) { content }
+            } else {
+                content
+            }
+        }
+    }
+
+    private var content: some View {
+        HStack(spacing: Theme.spacingMD) {
             // App icon (asset → SF Symbol fallback)
             Group {
                 if let asset = sibling.iconAsset, UIImage(named: asset) != nil {
@@ -74,71 +156,38 @@ struct CrossPromoModal: View {
                         .scaledToFit()
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(Theme.gold)
-                        .padding(28)
+                        .padding(12)
                         .background(Theme.cardSurface)
                 }
             }
-            .frame(width: 120, height: 120)
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .shadow(color: Theme.gold.opacity(0.4), radius: 20)
+            .frame(width: 64, height: 64)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-            VStack(spacing: Theme.spacingSM) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(sibling.name)
-                    .font(.largeTitle.weight(.bold))
-                    .foregroundStyle(Theme.primaryText)
-
-                Text(sibling.tagline)
                     .font(.headline)
+                    .foregroundStyle(Theme.primaryText)
+                Text(sibling.tagline)
+                    .font(.caption)
                     .foregroundStyle(Theme.gold)
+                    .lineLimit(2)
             }
-
-            Text(sibling.blurb)
-                .font(.body)
-                .foregroundStyle(Theme.secondaryText)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Theme.spacingLG)
 
             Spacer()
 
-            VStack(spacing: Theme.spacingSM) {
-                if let url = sibling.appStoreURL {
-                    Link(destination: url) {
-                        HStack {
-                            Image(systemName: "arrow.up.right.square.fill")
-                            Text("Get \(sibling.name) on the App Store")
-                                .font(.headline.weight(.semibold))
-                        }
-                        .foregroundStyle(Theme.background)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Theme.gold, in: Capsule())
-                    }
-                    .simultaneousGesture(TapGesture().onEnded { onDismiss() })
-                }
-
-                Button("Maybe Later", action: onDismiss)
+            HStack(spacing: 4) {
+                Text("Get")
+                    .font(.subheadline.weight(.semibold))
+                Image(systemName: "arrow.up.right.square.fill")
                     .font(.subheadline)
-                    .foregroundStyle(Theme.secondaryText)
-                    .padding(.vertical, 8)
             }
-            .padding(.horizontal, Theme.spacingLG)
-            .padding(.bottom, Theme.spacingMD)
+            .foregroundStyle(Theme.background)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Theme.gold, in: Capsule())
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.background)
-        .overlay(alignment: .topTrailing) {
-            Button {
-                onDismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title2)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.white.opacity(0.5))
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .padding(.trailing, 8)
-            .padding(.top, 8)
-        }
+        .padding(Theme.spacingMD)
+        .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: Theme.radiusMD, style: .continuous))
+        .contentShape(Rectangle())
     }
 }

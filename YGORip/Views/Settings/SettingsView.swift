@@ -4,13 +4,14 @@ import RevenueCat
 
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(CollectionStats.self) private var collectionStats
     @Environment(\.modelContext) private var modelContext
     @Environment(StoreKitService.self) private var storeKit
     @State private var showResetConfirmation = false
     @State private var showResetSuccess = false
     @State private var showDisclaimerSheet = false
     #if DEBUG
-    @State private var debugCrossPromoSibling: SiblingApp?
+    @State private var showDebugCrossPromo = false
     #endif
 
     var body: some View {
@@ -51,9 +52,9 @@ struct SettingsView: View {
                 disclaimerSheet
             }
             #if DEBUG
-            .sheet(item: $debugCrossPromoSibling) { sib in
-                CrossPromoModal(sibling: sib) {
-                    debugCrossPromoSibling = nil
+            .sheet(isPresented: $showDebugCrossPromo) {
+                CrossPromoModal(siblings: SiblingApp.crossPromoTargets) {
+                    showDebugCrossPromo = false
                 }
             }
             #endif
@@ -387,12 +388,10 @@ struct SettingsView: View {
                 Label("Foil Sandbox", systemImage: "sparkles.rectangle.stack")
             }
 
-            ForEach(SiblingApp.crossPromoTargets) { sib in
-                Button {
-                    debugCrossPromoSibling = sib
-                } label: {
-                    Label("Cross-Promo: \(sib.name)", systemImage: "megaphone.fill")
-                }
+            Button {
+                showDebugCrossPromo = true
+            } label: {
+                Label("Show Cross-Promo Modal", systemImage: "megaphone.fill")
             }
         } header: {
             Text("Debug")
@@ -480,6 +479,7 @@ struct SettingsView: View {
     // MARK: - Actions
 
     private func resetAllData() {
+        // 1. Wipe SwiftData rows.
         do {
             try modelContext.delete(model: PullRecord.self)
             try modelContext.delete(model: CardModel.self)
@@ -489,9 +489,33 @@ struct SettingsView: View {
             // SwiftData delete can throw but rarely fails
         }
 
-        // Reset UserDefaults stats
+        // 2. Clear the in-memory CollectionStats aggregates. Without
+        //    this, Home / Stats keep showing pre-reset counts until
+        //    the next app launch re-initializes the cache from the
+        //    (now empty) database.
+        collectionStats.reset()
+
+        // 3. Reset AppState pack counters via the @Observable setters.
+        //    Poking UserDefaults directly (the old reset path did)
+        //    leaves AppState's in-memory values stale until relaunch.
+        appState.resetCollectionCounters()
+
+        // 4. Discard any pack staged by the prefetcher. The staged pack's
+        //    PulledCards have `isNew` baked in from the pre-reset PullRecord
+        //    state — without invalidating, the next pack the user opens
+        //    would show its cards as "not new" because they were previously
+        //    owned, even though their entire pull history was just wiped.
+        PackPrefetcher.shared.cancelPending()
+
+        // 5. Re-arm the one-shot price backfill so post-reset pulls
+        //    of previously-owned cards get fresh prices instead of
+        //    inheriting whatever bundled-or-stale prices SwiftData
+        //    would re-seed on next sync.
+        PriceBackfillService.reset()
+
+        // 6. Legacy UserDefaults keys the resetCollectionCounters() path
+        //    doesn't own (kept as belt-and-suspenders for older builds).
         UserDefaults.standard.set(0, forKey: "packsOpenedToday")
-        UserDefaults.standard.set(0, forKey: "totalPacksOpened")
         UserDefaults.standard.removeObject(forKey: "lastPackDate")
 
         showResetSuccess = true

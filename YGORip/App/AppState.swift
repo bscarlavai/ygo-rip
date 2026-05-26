@@ -135,6 +135,29 @@ final class AppState {
         regenPacks()
     }
 
+    // MARK: - Collection Reset
+
+    /// Zero out the pack-tracking state. Called from Settings → Reset
+    /// Collection alongside the SwiftData and CollectionStats wipes.
+    /// Uses the `private(set)` property setters so their `didSet`
+    /// blocks update both the @Observable surface (so views re-render)
+    /// AND UserDefaults — poking UserDefaults directly from outside
+    /// (like the old reset path) leaves the in-memory @Observable
+    /// values stale until the next app launch.
+    ///
+    /// Intentionally does NOT touch:
+    /// - User preferences (haptics, sound, gyro, notifications)
+    /// - Premium / `isUnlimitedRips` (the IAP unlock survives a reset)
+    /// - `hasOpenedFirstPack` (avoids re-triggering the onboarding-
+    ///   adjacent cross-promo flow on the user's "fresh start" first
+    ///   pack — they've used the app before)
+    /// - `crossPromoSeenApps` (same rationale)
+    func resetCollectionCounters() {
+        totalPacksOpened = 0
+        currentPacks = Self.maxPacks
+        lastRegenDate = .now
+    }
+
     // MARK: - Pack Tracking
 
     func recordPackOpened() {
