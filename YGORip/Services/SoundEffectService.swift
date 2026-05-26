@@ -53,13 +53,14 @@ final class SoundEffectService {
             player = p
         }
 
-        // Perceptual volume curve. `AVAudioPlayer.volume` is linear
-        // amplitude (0 = silent, 1 = full), but human hearing is
-        // logarithmic — a linear 0.5 slider only sounds ~6 dB quieter
-        // than 1.0, which feels like "barely changed." Squaring maps
-        // 0.5 → 0.25 amplitude (~-12 dB), giving the slider the
-        // perceptually-linear feel users expect.
-        player.volume = volume * volume
+        // Perceptual volume curve + max-amplitude cap. `AVAudioPlayer.volume`
+        // is linear amplitude, but human hearing is logarithmic — squaring
+        // gives the slider a perceptually-linear feel. We also cap the
+        // ceiling at 0.25 amplitude (~-12 dB from full): the raw mp3
+        // recorded loud and full-output was jarring against ambient app
+        // sound. The cap shifts the whole curve down — slider 1.0 sounds
+        // like the old slider 0.5; slider 0.5 sounds like the old 0.25.
+        player.volume = (volume * volume) * 0.25
         player.currentTime = 0
         player.play()
     }
