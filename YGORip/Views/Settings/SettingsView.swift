@@ -147,8 +147,10 @@ struct SettingsView: View {
             Toggle(isOn: $state.hapticsEnabled) {
                 Label("Haptic Feedback", systemImage: "hand.tap.fill")
             }
-            Toggle(isOn: $state.soundEffectsEnabled) {
-                Label("Sound Effects", systemImage: "speaker.wave.2.fill")
+            VStack(alignment: .leading, spacing: Theme.spacingXS) {
+                Label("Sound Effects", systemImage: state.soundEffectsVolume > 0 ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                Slider(value: $state.soundEffectsVolume, in: 0...1)
+                    .tint(Theme.accent)
             }
             Toggle(isOn: $state.notificationsEnabled) {
                 Label("Pack Notifications", systemImage: "bell.fill")

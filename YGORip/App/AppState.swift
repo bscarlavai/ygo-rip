@@ -47,12 +47,13 @@ final class AppState {
         didSet { UserDefaults.standard.set(unownedCardBiasEnabled, forKey: "unownedCardBiasEnabled") }
     }
 
-    /// Master toggle for in-app sound effects (card-swipe sound, etc.).
+    /// Playback volume for in-app sound effects (card-swipe sound, etc.).
+    /// 0 = effectively off (service short-circuits before playing).
     /// Independent of the iOS Silent switch — those interactions are
     /// handled by the `.ambient` audio session category. Read by
     /// `SoundEffectService.play(_:)` via its weak `appState` reference.
-    var soundEffectsEnabled: Bool {
-        didSet { UserDefaults.standard.set(soundEffectsEnabled, forKey: "soundEffectsEnabled") }
+    var soundEffectsVolume: Float {
+        didSet { UserDefaults.standard.set(soundEffectsVolume, forKey: "soundEffectsVolume") }
     }
 
     // MARK: - Pack Regen System
@@ -121,7 +122,15 @@ final class AppState {
         self.idleHoloShimmerEnabled = UserDefaults.standard.object(forKey: "idleHoloShimmerEnabled") as? Bool ?? true
         self.notificationsEnabled = UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool ?? true
         self.unownedCardBiasEnabled = UserDefaults.standard.object(forKey: "unownedCardBiasEnabled") as? Bool ?? true
-        self.soundEffectsEnabled = UserDefaults.standard.object(forKey: "soundEffectsEnabled") as? Bool ?? true
+        // Default to full volume. If a TestFlight build of the previous
+        // "soundEffectsEnabled" bool has been seen, treat false as 0.
+        if let stored = UserDefaults.standard.object(forKey: "soundEffectsVolume") as? Float {
+            self.soundEffectsVolume = stored
+        } else if UserDefaults.standard.object(forKey: "soundEffectsEnabled") as? Bool == false {
+            self.soundEffectsVolume = 0
+        } else {
+            self.soundEffectsVolume = 1.0
+        }
         self.hasOpenedFirstPack = UserDefaults.standard.bool(forKey: "hasOpenedFirstPack")
         self.crossPromoSeenApps = Set(UserDefaults.standard.stringArray(forKey: "crossPromoSeenApps") ?? [])
 

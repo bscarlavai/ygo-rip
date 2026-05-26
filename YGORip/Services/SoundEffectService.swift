@@ -29,11 +29,15 @@ final class SoundEffectService {
 
     private init() {}
 
-    /// Play the given effect, respecting `AppState.soundEffectsEnabled`.
+    /// Play the given effect at the user's chosen volume. Volume of 0
+    /// short-circuits before touching AVAudioSession or AVAudioPlayer —
+    /// "off" by way of "play at zero" matches the BackgroundMusicService
+    /// pattern and keeps the slider's "0 = off" UX honest.
     /// Cheap to call repeatedly — pre-loads on first play, rewinds on
     /// subsequent calls.
     func play(_ effect: Effect) {
-        guard appState?.soundEffectsEnabled ?? true else { return }
+        let volume = appState?.soundEffectsVolume ?? 1.0
+        guard volume > 0 else { return }
         configureSession()
 
         let player: AVAudioPlayer
@@ -49,6 +53,7 @@ final class SoundEffectService {
             player = p
         }
 
+        player.volume = volume
         player.currentTime = 0
         player.play()
     }
