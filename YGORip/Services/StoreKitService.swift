@@ -10,7 +10,7 @@ final class StoreKitService {
     private(set) var purchasedTier: String?
     private(set) var purchaseError: String?
 
-    static let apiKey = "appl_EYzymVSQEQyjxSkvUAucPprPvaj"
+    static let apiKey = "appl_ArfKCXEJoNiSlDFHqJwMCLYImFq"
 
     static let tipProductIDs: Set<String> = [
         "com.lavailabs.ygorip.tip.support",
