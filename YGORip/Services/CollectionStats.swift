@@ -58,6 +58,16 @@ final class CollectionStats {
     /// on each `recordPulls` call (one pack = one session).
     private(set) var packsOpenedBySet: [String: Int] = [:]
 
+    /// Monotonic counter bumped whenever live prices are written back to
+    /// CardModels (post-pack-summary refresh + one-shot backfill). Pure
+    /// signaling field — observers like StatsView watch this so their
+    /// derived "Collection Value" cache rebuilds when the underlying
+    /// `priceMarket` values change. SwiftData's @Query republishes on
+    /// model mutations too, but the cache trigger in StatsView is keyed
+    /// on `totalPulls` (which doesn't change for a price-only update),
+    /// hence this separate signal.
+    var priceRefreshTick: Int = 0
+
     /// Sum of every pull (not unique cards). Used by StatsView's "Total Pulls"
     /// stat and as the change-detection signal for views that re-cache derived
     /// data via `.onChange(of:)`.

@@ -135,7 +135,18 @@ struct HomeView: View {
             }
             .background(Theme.background)
             .toolbar(.hidden, for: .navigationBar)
-            .task { await syncSetsIfNeeded() }
+            .task {
+                // Sync first, then run the one-shot price backfill. Both
+                // mutate CardModel/SetModel on @MainActor — chaining (vs
+                // two parallel .task blocks) keeps the sync's cascade
+                // deletes from racing with the backfill's reads of the
+                // same rows.
+                await syncSetsIfNeeded()
+                await PriceBackfillService.runIfNeeded(
+                    modelContext: modelContext,
+                    collectionStats: collectionStats
+                )
+            }
             .refreshable { await syncSetsIfNeeded() }
             .onAppear {
                 withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {

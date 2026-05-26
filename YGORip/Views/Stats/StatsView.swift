@@ -131,6 +131,10 @@ struct StatsView: View {
         .background(Theme.background)
         .onAppear { rebuildStats() }
         .onChange(of: collectionStats.totalPulls) { _, _ in rebuildStats() }
+        // Picks up batch price refreshes (pack-summary path) and one-shot
+        // backfills (PriceBackfillService). totalPulls doesn't change for
+        // price-only writes, so we need this separate trigger.
+        .onChange(of: collectionStats.priceRefreshTick) { _, _ in rebuildStats() }
         .sheet(item: $shareItem) { item in
             ShareSheet(image: item.image)
         }
