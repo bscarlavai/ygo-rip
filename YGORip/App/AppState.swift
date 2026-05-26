@@ -122,15 +122,12 @@ final class AppState {
         self.idleHoloShimmerEnabled = UserDefaults.standard.object(forKey: "idleHoloShimmerEnabled") as? Bool ?? true
         self.notificationsEnabled = UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool ?? true
         self.unownedCardBiasEnabled = UserDefaults.standard.object(forKey: "unownedCardBiasEnabled") as? Bool ?? true
-        // Default to full volume. If a TestFlight build of the previous
-        // "soundEffectsEnabled" bool has been seen, treat false as 0.
-        if let stored = UserDefaults.standard.object(forKey: "soundEffectsVolume") as? Float {
-            self.soundEffectsVolume = stored
-        } else if UserDefaults.standard.object(forKey: "soundEffectsEnabled") as? Bool == false {
-            self.soundEffectsVolume = 0
-        } else {
-            self.soundEffectsVolume = 1.0
-        }
+        // Default to silent for 1.0 — the SoundEffectService short-
+        // circuits at 0 so the swipe sound never plays unless the user
+        // explicitly raises the slider (currently DEBUG-only). When sound
+        // effects are ready to ship to all users, raise this default and
+        // unhide the slider in SettingsView.
+        self.soundEffectsVolume = UserDefaults.standard.object(forKey: "soundEffectsVolume") as? Float ?? 0
         self.hasOpenedFirstPack = UserDefaults.standard.bool(forKey: "hasOpenedFirstPack")
         self.crossPromoSeenApps = Set(UserDefaults.standard.stringArray(forKey: "crossPromoSeenApps") ?? [])
 
