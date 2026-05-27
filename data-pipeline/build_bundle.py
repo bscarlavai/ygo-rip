@@ -334,7 +334,33 @@ def _set_number(printing_code):
 _MODERN_ERAS = {"arcv", "vrains", "sevens", "gorush"}
 
 
-def featured_card_id(printings, era):
+def _ranked_candidates(printings, era):
+    """Return printings sorted from best featured-candidate to worst,
+    using the same heuristic as the legacy `featured_card_id`. The
+    caller can walk this list and skip candidates that fail external
+    constraints (already used, image 404, etc.) without rewriting the
+    selection logic."""
+    if not printings:
+        return []
+    if era in _MODERN_ERAS:
+        return sorted(
+            printings,
+            key=lambda p: (-_rarity_tier(p["rarity"]), _set_number(p["code"])),
+        )
+    # Pre-modern: prefer Ultra Rare at lowest set_number, fall back to
+    # highest rarity at lowest set_number.
+    ultras = sorted(
+        (p for p in printings if _rarity_tier(p["rarity"]) == 3),
+        key=lambda p: _set_number(p["code"]),
+    )
+    rest = sorted(
+        (p for p in printings if _rarity_tier(p["rarity"]) != 3),
+        key=lambda p: (-_rarity_tier(p["rarity"]), _set_number(p["code"])),
+    )
+    return ultras + rest
+
+
+def featured_card_id(printings, era, already_used=None, image_validator=None):
     """Heuristic pick for the 'boss / cover' card of a set, used as the
     visual identity on the Home grid tile.
 
@@ -345,27 +371,101 @@ def featured_card_id(printings, era):
       Common/Rare/Super/Ultra/Secret — cover monster was always the Ultra
       Rare at #001 (e.g. LOB's Blue-Eyes White Dragon at LOB-001). Falls
       back to the highest-tier card if no Ultra exists (sparse promo sets).
+
+    Two additional filters when `already_used` and `image_validator` are
+    passed (the build loop populates these chronologically):
+    - Skip candidates already used by an earlier set. Strict — a card
+      becomes the featured for exactly the FIRST set to claim it. Later
+      sets containing the same card (reprints, deck-name namesakes)
+      get their next-best candidate. The fallback pass only ignores
+      dedup when no untaken candidate has a working image.
+    - Skip candidates whose cropped-art URL 404s on YGOPRODeck (with
+      caching so we don't re-check the same ID twice per run).
     """
-    if not printings:
+    candidates = _ranked_candidates(printings, era)
+    if not candidates:
         return None
 
-    if era in _MODERN_ERAS:
-        ordered = sorted(
-            printings,
-            key=lambda p: (-_rarity_tier(p["rarity"]), _set_number(p["code"])),
-        )
-        return ordered[0]["id"]
+    already_used = already_used or set()
 
-    ultras = [p for p in printings if _rarity_tier(p["rarity"]) == 3]
-    if ultras:
-        ultras.sort(key=lambda p: _set_number(p["code"]))
-        return ultras[0]["id"]
+    # First pass: dedup + image validation.
+    for c in candidates:
+        cid = c["id"]
+        if cid in already_used:
+            continue
+        if image_validator is not None and not image_validator(cid):
+            continue
+        return cid
 
-    ordered = sorted(
-        printings,
-        key=lambda p: (-_rarity_tier(p["rarity"]), _set_number(p["code"])),
+    # Fallback: every untaken candidate failed image-check (or there are
+    # none — single-card sets land here). Ignore dedup, only enforce
+    # image existence so the set still gets *some* working art.
+    for c in candidates:
+        cid = c["id"]
+        if image_validator is not None and not image_validator(cid):
+            continue
+        return cid
+
+    # Last resort: return top candidate even if image is missing.
+    return candidates[0]["id"]
+
+
+# -----------------------------------------------------------------------------
+# Featured-card image validation
+# -----------------------------------------------------------------------------
+# YGOPRODeck doesn't serve cropped-art images for every card ID — rare
+# promo / tournament-prize cards often have card data but no
+# /cards_cropped/<id>.jpg. The Home grid tile loads the cropped URL
+# directly, so a 404 leaves the tile in its dark "loading" state
+# forever. We HEAD-check each candidate during pipeline build and pick
+# an alternative if the canonical pick has no image. Results cached
+# in raw/featured_image_cache.json so re-runs don't re-check.
+
+_FEATURED_IMAGE_CACHE_PATH = RAW / "featured_image_cache.json"
+_featured_image_cache = None
+
+
+def _load_featured_image_cache():
+    global _featured_image_cache
+    if _featured_image_cache is not None:
+        return _featured_image_cache
+    if _FEATURED_IMAGE_CACHE_PATH.exists():
+        try:
+            raw = json.loads(_FEATURED_IMAGE_CACHE_PATH.read_text())
+            # JSON object keys are strings; coerce back to int.
+            _featured_image_cache = {int(k): bool(v) for k, v in raw.items()}
+        except Exception:
+            _featured_image_cache = {}
+    else:
+        _featured_image_cache = {}
+    return _featured_image_cache
+
+
+def _save_featured_image_cache():
+    if _featured_image_cache is None:
+        return
+    _FEATURED_IMAGE_CACHE_PATH.write_text(
+        json.dumps({str(k): v for k, v in _featured_image_cache.items()})
     )
-    return ordered[0]["id"]
+
+
+def cropped_image_exists(card_id):
+    """HEAD-check `images.ygoprodeck.com/images/cards_cropped/<id>.jpg`.
+    Returns True if 2xx, False on 4xx/5xx/network error. Cached
+    per-run so subsequent picks for the same card don't re-fetch."""
+    cache = _load_featured_image_cache()
+    if card_id in cache:
+        return cache[card_id]
+    url = f"https://images.ygoprodeck.com/images/cards_cropped/{card_id}.jpg"
+    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
+    ok = False
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            ok = 200 <= resp.status < 300
+    except Exception:
+        ok = False
+    cache[card_id] = ok
+    return ok
 
 
 def index_printings(cards):
@@ -792,12 +892,21 @@ def main():
         else:
             code_collision_dropped.append((code, s.get("set_name", ""), s.get("num_of_cards", 0)))
     canonical_sets = list(sets_by_code.values())
+    # Sort chronologically so featured-card dedup gives the EARLIEST set
+    # to legitimately use a given card (e.g., Legend of Blue Eyes White
+    # Dragon, 2002) priority over later reprint sets. Tie-break on
+    # set_code for stability.
+    canonical_sets.sort(key=lambda s: (s.get("tcg_date") or "9999-99-99", s.get("set_code", "")))
     print(f"Dedup by set_code: {len(raw_sets)} → {len(canonical_sets)} canonical sets ({len(code_collision_dropped)} variants dropped)", file=sys.stderr)
 
     # 4. Build set records — join YGOPRODeck cardsets.php list with printings_by_name
     set_records = []
     sets_no_printings = []
     collab_skipped = []
+    # Cards already chosen as featured by earlier (chronologically) sets.
+    # The featured picker honors this except for sets whose names match
+    # a theme allowlist (Blue-Eyes / Kaiba decks still get Blue-Eyes).
+    featured_already_used = set()
     for s in canonical_sets:
         name = s.get("set_name", "")
         code = s.get("set_code", "")
@@ -818,6 +927,14 @@ def main():
             sets_no_printings.append((code, name))
             continue
         era = era_for_date(tcg_date)
+        chosen_featured = featured_card_id(
+            printings,
+            era,
+            already_used=featured_already_used,
+            image_validator=cropped_image_exists,
+        )
+        if chosen_featured is not None:
+            featured_already_used.add(chosen_featured)
         record = {
             "code": code,
             "name": name,
@@ -831,7 +948,7 @@ def main():
             "totalCards": len(printings),
             "era": era,
             "shelf": shelf_for(name, tcg_date),
-            "featuredCardID": featured_card_id(printings, era),
+            "featuredCardID": chosen_featured,
         }
         set_records.append(record)
 
@@ -840,6 +957,10 @@ def main():
             (OUT / f"set-cards-{code}.json").write_text(
                 json.dumps(printings, separators=(",", ":"))
             )
+
+    # Persist the cropped-image HEAD-check cache so subsequent re-runs
+    # don't re-fetch every URL.
+    _save_featured_image_cache()
 
     # 5. Write global card index
     if not args.sets_only:

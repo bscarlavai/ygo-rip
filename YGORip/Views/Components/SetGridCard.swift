@@ -12,6 +12,12 @@ struct SetGridCard: View {
     /// via `ImageCacheService` (memory + disk cached), shared with the
     /// rest of the app's card image loading.
     @State private var artImage: UIImage?
+    /// True once we've tried to load the featured-card cropped art and
+    /// failed (URL 404 / network error). Used to fall back to the YGO
+    /// logo instead of leaving the tile in its dark "loading" state
+    /// forever — YGOPRODeck doesn't serve cropped art for some rare
+    /// promo card IDs.
+    @State private var artLoadFailed: Bool = false
 
     private var isComplete: Bool {
         let total = set.totalCards
@@ -94,7 +100,7 @@ struct SetGridCard: View {
 
     @ViewBuilder
     private var artBackground: some View {
-        if let url = set.featuredCardCroppedURL {
+        if let url = set.featuredCardCroppedURL, !artLoadFailed {
             Group {
                 if let img = artImage {
                     Image(uiImage: img)
@@ -110,8 +116,9 @@ struct SetGridCard: View {
             .allowsHitTesting(false)
             .task(id: url) { await loadArt(urlString: url) }
         } else {
-            // Sparse sets with no featured card pick — fall back to the
-            // YGO logo centered like the old tile.
+            // Either the bundle didn't pick a featured card OR the URL
+            // 404'd on YGOPRODeck. Either way, fall back to the YGO
+            // logo centered like the old tile.
             VStack {
                 Spacer()
                 SetSymbolView(set: set, size: 130, color: Theme.accent)
@@ -127,8 +134,14 @@ struct SetGridCard: View {
             return
         }
         // Async fetch — disk cache hit is fast, network fetch lazy.
-        if let img = try? await ImageCacheService.shared.image(for: urlString) {
+        // On failure flip the artLoadFailed flag so the view re-renders
+        // with the YGO-logo fallback instead of holding the dark
+        // "loading" tint forever.
+        do {
+            let img = try await ImageCacheService.shared.image(for: urlString)
             self.artImage = img
+        } catch {
+            self.artLoadFailed = true
         }
     }
 }
