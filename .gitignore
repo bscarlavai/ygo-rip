@@ -42,3 +42,10 @@ AuthKey_*.p8
 
 # Data pipeline — YGOPRODeck raw downloads (regeneratable from build_bundle.py)
 data-pipeline/raw/
+
+# Marketing — App Store screenshot artifacts (regeneratable via the
+# app-store-screenshots skill + screenshot_config.json). The config
+# itself IS committed so future runs reproduce identical framing.
+marketing/screenshots/raw/
+marketing/screenshots/raw-ipad/
+marketing/screenshots/final/

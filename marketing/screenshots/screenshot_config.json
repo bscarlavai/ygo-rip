@@ -1,0 +1,45 @@
+{
+  "app_name": "YGORip",
+  "background": {
+    "type": "gradient",
+    "colors": ["#0F1923", "#040810"],
+    "direction": "vertical"
+  },
+  "text_color": "#FFFFFF",
+  "accent_color": "#FFD700",
+  "device_glow": true,
+  "font_size_headline": 100,
+  "font_size_subhead": 38,
+  "screens": [
+    {
+      "filename": "01_home.png",
+      "headline": "Rip *Every* Era",
+      "subheadline": "From the classics to the latest premier sets"
+    },
+    {
+      "filename": "02_setdetail.png",
+      "headline": "Pick a Set. *Rip* a Pack.",
+      "subheadline": "Era-accurate booster composition"
+    },
+    {
+      "filename": "03_packsummary.png",
+      "headline": "Every Pull Feels *Real*",
+      "subheadline": "Rarity-scaled animations and foil shimmer"
+    },
+    {
+      "filename": "04_cardinspect.png",
+      "headline": "Know What It's *Worth*",
+      "subheadline": "Live market prices on every card you find"
+    },
+    {
+      "filename": "05_collection.png",
+      "headline": "Every Card You've *Pulled*",
+      "subheadline": "Grid, binder, list — sort by rarity, date, or value"
+    },
+    {
+      "filename": "06_stats.png",
+      "headline": "Track Your *Luck*",
+      "subheadline": "Rarity breakdown, luckiest pulls, collection value"
+    }
+  ]
+}
