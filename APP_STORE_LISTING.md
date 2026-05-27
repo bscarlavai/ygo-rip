@@ -47,7 +47,10 @@ tcg,booster,opener,collection,trading,card,pull,foil,binder,rip,duel,simulator,f
     master duel (Konami's official app dominates), deck builder
     (other apps dominate), tournament, paper, lgs
 
-  Categories: Primary = Games (Card + Simulation), Secondary = Entertainment
+  Categories: Primary = Reference, Secondary = Utilities. Steers
+  away from a Games positioning to keep a more conservative
+  trademark posture; precedent set by Pokellector / Dex for TCG /
+  Collectr which sit in these categories.
 -->
 
 ## Promotional Text
@@ -126,10 +129,17 @@ Source files in `marketing/screenshots/` (1320×2868, iPhone 17 Pro Max native).
 
 ## App Store Connect Metadata
 
-- **Primary Category**: Games
-- **Secondary Category**: Entertainment
-- **Game Subcategories**: Card, Simulation
+- **Primary Category**: Reference
+- **Secondary Category**: Utilities
 - **Age Rating**: 12+ (Infrequent/Mild Cartoon or Fantasy Violence, Infrequent/Mild Horror/Fear Themes — matches the publisher's own official mobile card-game app rating)
+- **Category rationale**: Reference/Utilities frames the app as a tool
+  for collectors (pull tracking, set checklists, market prices, stats)
+  rather than as a "Yu-Gi-Oh game built on Konami's universe." More
+  conservative trademark posture for a fan app. Precedent: Pokellector
+  (Reference), Dex for TCG (Reference), Collectr (Utilities) sit in
+  these categories despite hybrid game-like / reference UX. The core
+  loop is more game-like than most Reference apps but discovery via
+  category browsing is minimal vs keywords + screenshots.
 - **Pricing**: Free with In-App Purchases
 - **In-App Purchase Names**: "Supporter Tip", "Super Supporter Tip", "Legendary Supporter Tip"
 - **Privacy**: Data Not Collected (everything on-device; RevenueCat uses anonymous IDs for IAP entitlements only)
