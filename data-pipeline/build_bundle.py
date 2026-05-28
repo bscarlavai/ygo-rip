@@ -266,6 +266,25 @@ def _rarity_tier(rarity):
     return _RARITY_TIER_TABLE.get((rarity or "").lower(), 0)
 
 
+# YGOPRODeck's `set_rarity` field occasionally contains non-rarity strings —
+# debut tags ("European debut", "Oceanian debut"), placeholder noise ("New",
+# "New artwork", "force-SMW"), or bare numerics ("2", "3"). These confuse the
+# engine (treated as Common-tier in `rarityRank`) and surface as ugly strings
+# in the card-inspect UI. Normalize them to "Common" — the safest fallback
+# since we have no signal about the card's true rarity.
+_GARBAGE_RARITIES = {
+    "new", "new artwork", "force-smw",
+    "european debut", "oceanian debut", "european & oceanian debut",
+    "2", "3",
+}
+
+
+def _normalize_rarity(rarity):
+    if (rarity or "").strip().lower() in _GARBAGE_RARITIES:
+        return "Common"
+    return rarity
+
+
 # Pull-frequency rank used as a tiebreaker in printing dedup. Modern YGO
 # sets reprint the same card under the same English numbering at multiple
 # rarities — e.g. AGOV-EN006 ships Diabellstar both as Secret Rare AND as
@@ -494,7 +513,7 @@ def index_printings(cards):
         for printing in card.get("card_sets", []):
             set_name = printing.get("set_name")
             set_code_full = printing.get("set_code", "")
-            rarity = printing.get("set_rarity", "Common")
+            rarity = _normalize_rarity(printing.get("set_rarity", "Common"))
             if not set_name:
                 continue
             priority = (_printing_priority(set_code_full), _pull_frequency_rank(rarity))
