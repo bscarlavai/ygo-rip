@@ -83,6 +83,13 @@ mapped from each set's `tcg_date`. Era buckets (rough):
 Source community wisdom: Yugipedia "Ultra Rare" article, Cardmarket "Box Math" series,
 YGOPRODeck's "Set Theory" articles.
 
+**Audit before shipping a bundle update:** run `python3 scripts/audit-rarity-coverage.py`, must exit 0. Three passes:
+- Engine → card-data: a rarity in a `PackConfig` weight table with no matching cards in any bundled set for that era. Silent drift — `PackPrefetcher`'s tier-aware fallback hides the bug.
+- Card-data → engine: a rarity in card data that no weight table can roll. Usually means new rarities (Ghost Rare reappearing, new Secret variants) need to be added to the era configs, or that garbage strings ("New", "European debut") slipped through `build_bundle.py` and need data-pipeline cleanup.
+- Hot pack reachability: for each era, the chase weights filtered to rank ≥ 3 must be non-empty and reachable in card data.
+
+The audit mirrors `PullRateEngine.swift`'s hardcoded era configs in Python — if you change those configs, update `ERA_WEIGHT_TABLES` in the audit too. Drift is partially self-detected via the cross-direction warnings.
+
 ### 4. No keyrune.ttf / no set-symbol font
 mtg-rip ships keyrune.ttf for corner glyphs. YGORip does **not** — YGO has no equivalent
 font and visually leans on pack logos instead. The `UIAppFonts` entry was removed from
