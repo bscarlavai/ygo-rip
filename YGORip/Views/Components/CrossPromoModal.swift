@@ -26,7 +26,7 @@ extension SiblingApp {
         key: "pokerip",
         name: "PokeRip",
         tagline: "Rip packs, chase rares.",
-        blurb: "From the makers of YGORip. Open booster packs from every era, chase Hyper Rares and Secret Rares, and build your dream collection.",
+        blurb: "From the makers of YuRip. Open booster packs from every era, chase Hyper Rares and Secret Rares, and build your dream collection.",
         iconAsset: "PokeRipIcon",
         fallbackSymbol: "sparkles.rectangle.stack.fill",
         appStoreID: "6762006216"
@@ -36,7 +36,7 @@ extension SiblingApp {
         key: "mtgrip",
         name: "MTGRip",
         tagline: "Rip packs, chase mythics.",
-        blurb: "From the makers of YGORip. Open boosters from every era, chase mythics and special-frame rares, and build your dream collection.",
+        blurb: "From the makers of YuRip. Open boosters from every era, chase mythics and special-frame rares, and build your dream collection.",
         iconAsset: "MTGRipIcon",
         fallbackSymbol: "wand.and.stars",
         appStoreID: "6770387435"

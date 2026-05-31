@@ -76,7 +76,7 @@ struct SettingsView: View {
                 }
             } else {
                 VStack(alignment: .leading, spacing: Theme.spacingSM) {
-                    Label("Support YGORip", systemImage: "heart.fill")
+                    Label("Support YuRip", systemImage: "heart.fill")
                         .foregroundStyle(Theme.gold)
 
                     Text("A one-time tip (no subscription) unlocks unlimited pack opens and removes the regen timer for good.")
@@ -257,11 +257,11 @@ struct SettingsView: View {
         Section {
             if let url = URL(string: "https://apps.apple.com/app/id\(appStoreID)?action=write-review") {
                 Link(destination: url) {
-                    Label("Rate YGORip", systemImage: "star.fill")
+                    Label("Rate YuRip", systemImage: "star.fill")
                 }
             }
 
-            if let url = URL(string: "mailto:ygorip@lavailabs.com") {
+            if let url = URL(string: "mailto:yurip@lavailabs.com") {
                 Link(destination: url) {
                     Label("Contact Support", systemImage: "envelope.fill")
                 }
@@ -415,21 +415,18 @@ struct SettingsView: View {
                         .foregroundStyle(Theme.primaryText)
 
                     Text("""
-                    YGORip is not produced, endorsed, supported by, or affiliated with \
-                    Konami Digital Entertainment, Konami Group Corporation, Studio Dice, \
-                    Shueisha, TV Tokyo, or any of their subsidiaries.
+                    YuRip is an independent, unofficial fan project. It is not \
+                    produced, endorsed, supported by, or affiliated with any trading \
+                    card game publisher or rights-holder.
 
-                    Yu-Gi-Oh! and all related card names, artwork, and trademarks are \
-                    property of their respective owners.
+                    All card names, artwork, and related content are the property of \
+                    their respective owners. Card images and data are sourced from \
+                    publicly available community resources covering published trading cards.
 
-                    Card images and metadata are sourced from YGOPRODeck and YGOJSON — \
-                    community APIs providing publicly available information about \
-                    published trading cards.
-
-                    This app is an independent fan project created for entertainment \
-                    and educational purposes only. No real cards are distributed or \
-                    sold. Pull rates are simulated and do not represent actual product \
-                    odds. No copyright infringement is intended.
+                    This app is created for entertainment and educational purposes only. \
+                    No real cards are distributed or sold. Pull rates \
+                    are simulated and do not represent actual product odds. \
+                    No copyright infringement is intended.
                     """)
                     .font(.subheadline)
                     .foregroundStyle(Theme.secondaryText)

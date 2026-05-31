@@ -17,22 +17,19 @@ struct DisclaimerView: View {
                 .foregroundStyle(Theme.primaryText)
 
             Text("""
-            This app is not produced, endorsed, supported by, \
-            or affiliated with Konami Digital Entertainment, \
-            Konami Group Corporation, Studio Dice, Shueisha, TV Tokyo, \
-            or any of their subsidiaries.
+            This app is an independent, unofficial fan project. \
+            It is not produced, endorsed, supported by, or \
+            affiliated with any trading card game publisher or \
+            rights-holder.
 
-            Yu-Gi-Oh! and all related trademarks are property of \
-            their respective owners. Card images and metadata are \
-            sourced from YGOPRODeck and YGOJSON — community APIs \
-            providing publicly available information about published \
-            trading cards.
+            All card names, artwork, and related content are the \
+            property of their respective owners, sourced from \
+            publicly available community data.
 
-            This is an independent fan project created for \
-            entertainment and educational purposes only. \
-            No real cards are distributed or sold. Pull rates \
-            are simulated and do not represent actual product odds. \
-            No copyright infringement is intended.
+            Created for entertainment and educational purposes \
+            only. No real cards are distributed or sold. Pull \
+            rates are simulated and do not represent actual \
+            product odds. No copyright infringement is intended.
             """)
             .font(.subheadline)
             .foregroundStyle(Theme.secondaryText)

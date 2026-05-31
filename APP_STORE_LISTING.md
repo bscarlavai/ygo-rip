@@ -1,51 +1,48 @@
-# App Store Listing - YGORip
+# App Store Listing - YuRip
 
 ## Title
-YGORip - Card Pack Simulator
+YuRip - Card Pack Simulator
 
 ## Subtitle
 Rip Booster Packs & Collect
 
 ## Keywords
-tcg,booster,opener,collection,trading,card,pull,foil,binder,rip,duel,simulator,free,rare,monster
+tcg,booster,opener,collection,trading,card,pull,foil,binder,rip,chase,simulator,free,rare,secret
 
 <!-- ASO Notes:
-  Title (28 chars): "Card Pack Simulator" captures core genre searches.
-  Mirrors PokeRip / MTGRip naming convention. No trademark wordmark in
-  title. "YGORip" is the unique brand. ("YGO" abbreviation is not
-  protected, but the brand stays clear of the franchise wordmark.)
+  Title (26 chars): "Card Pack Simulator" captures core genre searches.
+  Mirrors PokeRip / MTGRip / LorRip naming. No franchise wordmark in
+  the title. "YuRip" is the unique brand. ("Yu" is a generic syllable,
+  not a protected wordmark.)
 
-  Subtitle (27 chars): Same subtitle as PokeRip / MTGRip — consistent
-  "Rip Network" branding. "Rip Booster Packs" is the core action +
+  Subtitle (27 chars): same subtitle as the siblings, consistent
+  "Rip Network" branding. "Rip Booster Packs" is the core action and
   indexes booster searches.
 
-  Keywords (95 chars): trademark-clean — no franchise wordmarks,
+  Keywords (97 chars): trademark-clean — no franchise wordmarks,
   publisher names, character names, or archetype names (all protected
-  and would trigger trademark reviews). Every word unique from
+  and would trigger trademark review). Every word unique from
   title/subtitle.
   Words already in title/subtitle:
-    ygorip, card, pack, simulator, rip, booster, packs, collect
+    yurip, card, pack, simulator, rip, booster, packs, collect
 
-  "duel" + "monster" together index the franchise's gameplay terms
-  without invoking the trademark wordmark. "monster" is also broad
-  enough to pick up general collectible-creature searches.
+  "secret" and "chase" index the game's signature rarity tiers without
+  invoking any wordmark; "foil" pulls in collector intent. Earlier
+  drafts used "duel" + "monster" — both safe in isolation, but
+  together they echo the franchise's gameplay name. Swapped out for a
+  more conservative trademark posture.
 
   High-value compound searches covered (title + subtitle + keywords):
     "tcg pack simulator", "booster pack simulator", "card pack opener",
-    "card collection tracker", "tcg booster opener", "duel monsters
-    simulator", "free pack opener", "foil card simulator", "card pull
-    simulator", "trading card simulator", "tcg simulator", "monster
-    card pack"
+    "card collection tracker", "tcg booster opener", "free pack opener",
+    "foil card simulator", "card pull simulator", "trading card
+    simulator", "tcg simulator", "secret rare", "chase card pull"
 
-  Differentiation strategy: hits the same TCG-collector intent as
-  PokeRip / MTGRip but for the third major card game. The cross-promo
-  modals in PokeRip and MTGRip already drive discovery to YGORip; ASO
-  for YGORip should pull in new users who don't already have one of
-  the siblings.
-
-  Dropped (off-genre or too competitive):
-    master duel (Konami's official app dominates), deck builder
-    (other apps dominate), tournament, paper, lgs
+  Differentiation strategy: hits the same TCG-collector intent as the
+  siblings (PokeRip / MTGRip / LorRip) but for a different major card
+  game. The cross-promo modals in the siblings drive discovery here;
+  ASO should pull in new users who don't already have a sibling
+  installed.
 
   Categories: Primary = Reference, Secondary = Utilities. Steers
   away from a Games positioning to keep a more conservative
@@ -82,7 +79,7 @@ Live market prices on every card. See what your pulls are worth, sort by value, 
 STATS & HISTORY
 Pull history with timestamps. Rarity breakdown. Luckiest pulls. Set completion percentage. Watch your collection grow over time.
 
-SUPPORT YGORIP - UNLOCK UNLIMITED RIPS
+SUPPORT YURIP - UNLOCK UNLIMITED RIPS
 Three tip tiers, pick what feels right. Any tip unlocks unlimited pack opens — no waiting on the regen timer.
 
 Every other feature — foil shimmer, particles, gyro tilt, full collection tracking, stats — is free for everyone. The tip is for unlimited access and to support development.
@@ -94,10 +91,10 @@ Cards and pulls are stored locally. No accounts. No ads. No user tracking.
 
 Requires iOS 18 or later.
 
-YGORip is not produced, endorsed, supported by, or affiliated with Konami Digital Entertainment, Konami Group Corporation, Studio Dice, Shueisha, TV Tokyo, or any of their subsidiaries. Yu-Gi-Oh! and all related card names, artwork, set names, and trademarks are property of their respective owners. Card images and metadata sourced from YGOPRODeck — a community API.
+YuRip is an independent, unofficial fan project. It is not produced, endorsed, supported by, or affiliated with any trading card game publisher or rights-holder. All card names, artwork, set names, and related content are the property of their respective owners. Card images and metadata are sourced from a publicly available community API.
 
 ## TestFlight - Beta App Description
-YGORip is a booster pack opening simulator for a popular trading card game. Pick any set, rip a pack, flip cards with rarity-scaled animations, and track your collection. Era-accurate booster composition per set.
+YuRip is a booster pack opening simulator for a popular trading card game. Pick any set, rip a pack, flip cards with rarity-scaled animations, and track your collection. Era-accurate booster composition per set.
 
 We'd love feedback on the pack opening experience, animation feel, the foil shader system, and pull rate balance across eras. Please report any bugs or crashes via TestFlight feedback.
 
@@ -131,28 +128,28 @@ Source files in `marketing/screenshots/` (1320×2868, iPhone 17 Pro Max native).
 
 - **Primary Category**: Reference
 - **Secondary Category**: Utilities
-- **Age Rating**: 12+ (Infrequent/Mild Cartoon or Fantasy Violence, Infrequent/Mild Horror/Fear Themes — matches the publisher's own official mobile card-game app rating)
+- **Age Rating**: 12+ (Infrequent/Mild Cartoon or Fantasy Violence, Infrequent/Mild Horror/Fear Themes)
 - **Category rationale**: Reference/Utilities frames the app as a tool
   for collectors (pull tracking, set checklists, market prices, stats)
-  rather than as a "Yu-Gi-Oh game built on Konami's universe." More
+  rather than a game built on the franchise's universe. A more
   conservative trademark posture for a fan app. Precedent: Pokellector
   (Reference), Dex for TCG (Reference), Collectr (Utilities) sit in
   these categories despite hybrid game-like / reference UX. The core
   loop is more game-like than most Reference apps but discovery via
   category browsing is minimal vs keywords + screenshots.
 - **Pricing**: Free with In-App Purchases
-- **In-App Purchase Names**: "Supporter Tip", "Super Supporter Tip", "Legendary Supporter Tip"
+- **In-App Purchase Names**: "Supporter", "Super Supporter", "Legendary Supporter" (non-consumable; any tier unlocks unlimited rips)
 - **In-App Purchase Description** (all three tiers): "Unlimited pack opens with no regen wait. A one-time purchase, not a subscription."
 - **Privacy**: Data Not Collected (everything on-device; RevenueCat uses anonymous IDs for IAP entitlements only)
-- **Support URL**: https://lavailabs.com/ygo-rip/support
-- **Marketing URL**: https://lavailabs.com/ygo-rip
-- **Privacy Policy URL**: https://lavailabs.com/ygo-rip/privacy
+- **Support URL**: https://lavailabs.com/yu-rip/support
+- **Marketing URL**: https://lavailabs.com/yu-rip
+- **Privacy Policy URL**: https://lavailabs.com/yu-rip/privacy
 
 ## App Review Notes (for Apple reviewer)
 
-YGORip is a fan-made trading card pack opening simulator. It is not affiliated with Konami Digital Entertainment or any of its subsidiaries and contains explicit disclaimers in onboarding, the Settings screen, and the legal pages linked from Settings.
+YuRip is a fan-made trading card pack opening simulator. It is not affiliated with any trading card game publisher or rights-holder, and contains explicit disclaimers in onboarding, the Settings screen, and the legal pages linked from Settings.
 
-The app uses card metadata and card images sourced from YGOPRODeck (a long-established community API used by many third-party apps in this space). Its use is consistent with practices of other apps in this category.
+The app uses card metadata and card images sourced from YGOPRODeck, a long-established community API used by many third-party apps in this space. Its use is consistent with practices of other apps in this category.
 
 No real cards are distributed or sold. All card pulls are simulated. The in-app tip tiers unlock unlimited pack opens by removing the regen timer; they are tips to support the developer, not purchases of card content. All foil, animation, and gyro effects are free for everyone and are never gated by the tip.
 

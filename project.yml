@@ -51,7 +51,7 @@ targets:
     info:
       path: YGORip/Info.plist
       properties:
-        CFBundleDisplayName: YGORip
+        CFBundleDisplayName: YuRip
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen:

@@ -27,7 +27,7 @@ struct ShareStatsCard: View {
         VStack(spacing: 0) {
             // Header with holo border
             VStack(spacing: 8) {
-                Text("YGORip")
+                Text("YuRip")
                     .font(.system(size: 36, weight: .black, design: .rounded))
                     .foregroundStyle(
                         LinearGradient(colors: holoColors, startPoint: .leading, endPoint: .trailing)
@@ -110,7 +110,7 @@ struct ShareStatsCard: View {
             HStack(spacing: 6) {
                 Image(systemName: "crown.fill")
                     .font(.system(size: 10))
-                Text("YGORip")
+                Text("YuRip")
                     .font(.system(size: 12, weight: .semibold))
             }
             .foregroundStyle(.white.opacity(0.25))
