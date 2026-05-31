@@ -116,11 +116,17 @@ final class PackPrefetcher {
     /// slot 0 lands ~2-3× faster on slow connections; by the time the user
     /// has finished reading it, the rest have a head start of several seconds.
     ///
-    /// Small images aren't preloaded — they aren't needed until the summary
-    /// screen, where lazy loading is fine.
+    /// The summary grid renders each card's SMALL image, a different cache
+    /// key than the large reveal image. Those small URLs are warmed in the
+    /// background `rest` task too — by the time the user finishes flipping
+    /// through the reveal, they're in the memory cache, so the summary grid
+    /// paints instantly instead of flashing skeletons for ~1s. Small images
+    /// are tiny, so they don't meaningfully compete with the large reveal
+    /// downloads for bandwidth.
     static func startImageFanOut(for pulled: [PulledCard]) -> (first: Task<Void, Never>, rest: Task<Void, Never>) {
         let firstURL = pulled[0].model.imageLargeURL
         let restURLs = pulled.dropFirst().map(\.model.imageLargeURL)
+        let smallURLs = pulled.map(\.model.imageSmallURL)
 
         PackTiming.mark("fanOut: firstTask start (slot 0)")
         let firstTask = Task {
@@ -129,9 +135,14 @@ final class PackPrefetcher {
         }
         let restTask = Task {
             await firstTask.value
-            PackTiming.mark("fanOut: restTask fan-out (slots 1-\(restURLs.count))")
+            PackTiming.mark("fanOut: restTask fan-out (slots 1-\(restURLs.count) + \(smallURLs.count) summary thumbs)")
             await withTaskGroup(of: Void.self) { group in
                 for url in restURLs {
+                    group.addTask {
+                        _ = try? await ImageCacheService.shared.image(for: url)
+                    }
+                }
+                for url in smallURLs {
                     group.addTask {
                         _ = try? await ImageCacheService.shared.image(for: url)
                     }
