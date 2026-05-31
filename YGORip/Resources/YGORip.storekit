@@ -10,7 +10,7 @@
       "internalID" : "tip_support",
       "localizations" : [
         {
-          "description" : "Unlimited pack opens, premium animations, gyro holo effects.",
+          "description" : "Unlimited pack opens with no regen wait. A one-time purchase, not a subscription.",
           "displayName" : "Supporter",
           "locale" : "en_US"
         }
@@ -25,7 +25,7 @@
       "internalID" : "tip_super",
       "localizations" : [
         {
-          "description" : "Unlimited pack opens, premium animations, gyro holo effects.",
+          "description" : "Unlimited pack opens with no regen wait. A one-time purchase, not a subscription.",
           "displayName" : "Super Supporter",
           "locale" : "en_US"
         }
@@ -40,7 +40,7 @@
       "internalID" : "tip_legendary",
       "localizations" : [
         {
-          "description" : "Unlimited pack opens, premium animations, gyro holo effects.",
+          "description" : "Unlimited pack opens with no regen wait. A one-time purchase, not a subscription.",
           "displayName" : "Legendary Supporter",
           "locale" : "en_US"
         }

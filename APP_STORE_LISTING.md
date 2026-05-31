@@ -142,6 +142,7 @@ Source files in `marketing/screenshots/` (1320×2868, iPhone 17 Pro Max native).
   category browsing is minimal vs keywords + screenshots.
 - **Pricing**: Free with In-App Purchases
 - **In-App Purchase Names**: "Supporter Tip", "Super Supporter Tip", "Legendary Supporter Tip"
+- **In-App Purchase Description** (all three tiers): "Unlimited pack opens with no regen wait. A one-time purchase, not a subscription."
 - **Privacy**: Data Not Collected (everything on-device; RevenueCat uses anonymous IDs for IAP entitlements only)
 - **Support URL**: https://lavailabs.com/ygo-rip/support
 - **Marketing URL**: https://lavailabs.com/ygo-rip
@@ -153,6 +154,6 @@ YGORip is a fan-made trading card pack opening simulator. It is not affiliated w
 
 The app uses card metadata and card images sourced from YGOPRODeck (a long-established community API used by many third-party apps in this space). Its use is consistent with practices of other apps in this category.
 
-No real cards are distributed or sold. All card pulls are simulated. The in-app tip tiers unlock unlimited pack-opening simulations and premium animations — they are tips to support the developer, not purchases of card content.
+No real cards are distributed or sold. All card pulls are simulated. The in-app tip tiers unlock unlimited pack opens by removing the regen timer; they are tips to support the developer, not purchases of card content. All foil, animation, and gyro effects are free for everyone and are never gated by the tip.
 
 Card images are streamed and cached on-device; YGOPRODeck's terms forbid hotlinking and the app's image cache layer respects this by downloading each image once per device and persisting to disk.

@@ -79,7 +79,7 @@ struct SettingsView: View {
                     Label("Support YGORip", systemImage: "heart.fill")
                         .foregroundStyle(Theme.gold)
 
-                    Text("Unlock unlimited pack opens, premium animations, and gyro holo effects.")
+                    Text("A one-time tip (no subscription) unlocks unlimited pack opens and removes the regen timer for good.")
                         .font(.caption)
                         .foregroundStyle(Theme.secondaryText)
                 }
