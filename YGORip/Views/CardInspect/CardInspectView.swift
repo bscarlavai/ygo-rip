@@ -333,7 +333,7 @@ struct CardInspectView: View {
         let api = YGOPRODeckService()
         do {
             let ygoCard = try await api.fetchCard(id: card.ygoID)
-            if let market = ygoCard.priceUSD {
+            if let market = ygoCard.priceUSD(forSetCode: card.number) {
                 card.priceMarket = market
                 // YGOPRODeck doesn't expose a separate "low" — reuse market for both.
                 card.priceLow = market

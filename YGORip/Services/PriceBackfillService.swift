@@ -21,7 +21,14 @@ struct PriceBackfillService {
     /// Bump the suffix when scheduling another backfill in the future
     /// (e.g. if we change the freshness threshold semantics or want to
     /// re-fetch for everyone).
-    private static let completedFlagKey = "priceBackfillCompleted_v1"
+    ///
+    /// v2 bump: the v1 backfill (and the original bundled prices) used
+    /// YGOPRODeck's per-card-design `tcgplayer_price`, which returns the
+    /// floor across every reprint — Blue-Eyes LOB-001 showed $0.14
+    /// instead of ~$253. The fix in `YGOPRODeckService.priceUSD(forSetCode:)`
+    /// reads per-printing `set_price`. Existing installs need one more
+    /// pass to overwrite the bad numbers.
+    private static let completedFlagKey = "priceBackfillCompleted_v2"
     private static let chunkSize = 10
     private static let interChunkDelayNanos: UInt64 = 1_000_000_000  // 1s
     /// Older-than threshold for "stale enough to refresh." Matches the
@@ -101,14 +108,18 @@ struct PriceBackfillService {
         var totalPriced = 0
 
         for (index, chunk) in chunks.enumerated() {
-            var priced: [Int: Double] = [:]
-            await withTaskGroup(of: (Int, Double)?.self) { group in
+            // Key by apiID (per-printing) — same card design owned at
+            // two different set printings must each get its own price.
+            var priced: [String: Double] = [:]
+            await withTaskGroup(of: (String, Double)?.self) { group in
                 for card in chunk {
                     let ygoID = card.ygoID
+                    let apiID = card.apiID
+                    let setCode = card.number
                     group.addTask {
                         guard let fetched = try? await api.fetchCard(id: ygoID),
-                              let price = fetched.priceUSD else { return nil }
-                        return (ygoID, price)
+                              let price = fetched.priceUSD(forSetCode: setCode) else { return nil }
+                        return (apiID, price)
                     }
                 }
                 for await item in group {
@@ -122,7 +133,7 @@ struct PriceBackfillService {
             // attempt if YGOPRODeck was temporarily flaky.
             let stamp = Date()
             for card in chunk {
-                guard let market = priced[card.ygoID] else { continue }
+                guard let market = priced[card.apiID] else { continue }
                 card.priceMarket = market
                 // YGOPRODeck doesn't expose a separate "low" — reuse market.
                 card.priceLow = market

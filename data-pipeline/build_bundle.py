@@ -501,6 +501,14 @@ def index_printings(cards):
     the base means the engine's normal slots can find it and chase
     variants are something we explicitly add later with their own
     treatments.
+
+    Price is per-printing: `card_sets[].set_price`, NOT
+    `card_prices[].tcgplayer_price`. The latter is per card design (per
+    `id`) and returns the floor across every reprint — for LOB-001
+    Blue-Eyes Ultra Rare it returns $0.14 (the cheap Starter Deck
+    reprint) instead of the ~$300 LOB 1st Edition. set_price doesn't
+    break 1st Edition vs Unlimited apart either, but it lands in the
+    correct order of magnitude.
     """
     # First pass: collect all (set_name, card_id) → best printing
     best = {}  # (set_name, card_id) → (priority, printing dict)
@@ -508,12 +516,15 @@ def index_printings(cards):
         cid = card.get("id")
         if cid is None:
             continue
-        prices = card.get("card_prices") or [{}]
-        tcg_price = prices[0].get("tcgplayer_price") if prices else None
         for printing in card.get("card_sets", []):
             set_name = printing.get("set_name")
             set_code_full = printing.get("set_code", "")
             rarity = _normalize_rarity(printing.get("set_rarity", "Common"))
+            set_price = printing.get("set_price")
+            # Treat "0.00" / "0" / "" as no data — better to render "——"
+            # than to claim a card is free.
+            if not set_price or set_price in ("0", "0.00"):
+                set_price = None
             if not set_name:
                 continue
             priority = (_printing_priority(set_code_full), _pull_frequency_rank(rarity))
@@ -522,7 +533,7 @@ def index_printings(cards):
                 "id": cid,
                 "rarity": rarity,
                 "code": set_code_full,
-                "price": tcg_price,
+                "price": set_price,
             })
             existing = best.get(key)
             if existing is None or priority < existing[0]:

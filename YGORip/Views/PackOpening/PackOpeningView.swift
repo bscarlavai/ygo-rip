@@ -954,14 +954,19 @@ struct PackOpeningView: View {
         guard !needsRefresh.isEmpty else { return }
 
         let api = YGOPRODeckService()
-        var priced: [Int: Double] = [:]
-        await withTaskGroup(of: (Int, Double)?.self) { group in
+        // Key by apiID (per-printing) rather than ygoID — the same card
+        // design pulled at two rarities/sets in the same pack would
+        // otherwise collide and one printing would lose its price.
+        var priced: [String: Double] = [:]
+        await withTaskGroup(of: (String, Double)?.self) { group in
             for pulled in needsRefresh {
                 let ygoID = pulled.model.ygoID
+                let apiID = pulled.model.apiID
+                let setCode = pulled.model.number
                 group.addTask {
                     guard let card = try? await api.fetchCard(id: ygoID),
-                          let price = card.priceUSD else { return nil }
-                    return (ygoID, price)
+                          let price = card.priceUSD(forSetCode: setCode) else { return nil }
+                    return (apiID, price)
                 }
             }
             for await item in group {
@@ -974,7 +979,7 @@ struct PackOpeningView: View {
             // Always update the timestamp — for cards with no API price we
             // still don't want to retry every summary visit.
             pulled.model.priceLastUpdated = now
-            if let market = priced[pulled.model.ygoID] {
+            if let market = priced[pulled.model.apiID] {
                 pulled.model.priceMarket = market
                 // YGOPRODeck doesn't expose a separate "low" — reuse market.
                 pulled.model.priceLow = market

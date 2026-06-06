@@ -69,22 +69,28 @@ struct YGOCardEnvelope: Decodable {
 struct YGOCard: Decodable {
     let id: Int
     let name: String
-    /// Always an array of one in practice; YGOPRODeck unconditionally emits a one-element array.
-    let card_prices: [YGOPrices]?
+    /// One entry per printing across every set. We match by `set_code` to
+    /// get per-printing prices — `card_prices[].tcgplayer_price` is per
+    /// card design and returns the floor across all reprints, which
+    /// understates chase cards by 1–2 orders of magnitude.
+    let card_sets: [YGOPrinting]?
 
-    var priceUSD: Double? {
-        guard let raw = card_prices?.first?.tcgplayer_price else { return nil }
-        return Double(raw)
+    /// TCGPlayer price for the given printing (`set_code` like "LOB-EN001").
+    /// Returns nil if YGOPRODeck has no per-printing price for that code.
+    func priceUSD(forSetCode code: String) -> Double? {
+        guard let printing = card_sets?.first(where: { $0.set_code == code }),
+              let raw = printing.set_price,
+              raw != "0.00", raw != "0",
+              let value = Double(raw) else { return nil }
+        return value
     }
 }
 
-/// All prices come through as strings (e.g. `"0.17"`). Parse on use.
-struct YGOPrices: Decodable {
-    let tcgplayer_price: String?
-    let cardmarket_price: String?
-    let ebay_price: String?
-    let amazon_price: String?
-    let coolstuffinc_price: String?
+/// Per-printing record. `set_price` comes through as a string ("239.93");
+/// parse on use. YGOPRODeck uses "0.00" or empty for "no data" — treat as nil.
+struct YGOPrinting: Decodable {
+    let set_code: String
+    let set_price: String?
 }
 
 // MARK: - Errors
