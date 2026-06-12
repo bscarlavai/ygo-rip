@@ -8,6 +8,16 @@ struct CachedImage: View {
     @State private var image: UIImage?
     @State private var hasLoaded = false
 
+    init(urlString: String) {
+        self.urlString = urlString
+        // Seed from the memory cache synchronously so a warm image renders on
+        // the first frame instead of flashing the loading state on every
+        // rebuild (set tiles, detail headers re-request the same cached URL).
+        let seed = ImageCacheService.shared.cachedImage(for: urlString)
+        _image = State(initialValue: seed)
+        _hasLoaded = State(initialValue: seed != nil)
+    }
+
     var body: some View {
         Group {
             if let image {
@@ -23,6 +33,7 @@ struct CachedImage: View {
             }
         }
         .task(id: urlString) {
+            if image != nil { return }
             guard !urlString.isEmpty else {
                 hasLoaded = true
                 return
