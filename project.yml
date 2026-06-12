@@ -67,3 +67,16 @@ targets:
       path: YGORip/YGORip.entitlements
     scheme:
       storeKitConfiguration: YGORip/Resources/YGORip.storekit
+      testTargets:
+        - YGORipTests
+
+  YGORipTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: YGORipTests
+    dependencies:
+      - target: YGORip
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES

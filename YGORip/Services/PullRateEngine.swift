@@ -183,6 +183,11 @@ extension PackConfig {
     //
     // Real packs: 9 cards. 8 Commons (with occasional Short Print) + 1 chase slot.
     // Short Prints were ~1:3 packs in this era — common but distinctly rarer.
+    // Super Short Prints (a handful per set: SRL, MRL, MFC, AST) rarer still,
+    // ~1:4 packs across the 8 common slots. They MUST appear here: the slot
+    // filler matches exact rarity strings first and only tier-falls-back when
+    // a pool is empty, so a rarity no table rolls is unpullable in any set
+    // that has Commons (= a permanently incompletable collection).
     // Secret Rare was the chase at roughly 1:24. No Starlight, Ultimate, Ghost, etc.
     static let lobEra = PackConfig(
         era: "lob_era",
@@ -192,7 +197,8 @@ extension PackConfig {
         rareSlots: 1,
         commonSlotWeights: [
             ("Common", 0.85),
-            ("Short Print", 0.15),
+            ("Short Print", 0.12),
+            ("Super Short Print", 0.03),
         ],
         rareSlotWeights: [
             ("Rare", 0.62),
@@ -209,13 +215,18 @@ extension PackConfig {
     // 9 cards. 8 Commons + 1 chase. Ultimate Rare introduced in Cybernetic
     // Revolution (2005), Ghost Rare in Phantom Darkness (2008). Slightly lower
     // Rare-slot ceiling than LOB since the rare distribution stretches further up.
+    // Most 100-card boosters in this era carry ~4 Short Prints — they need a
+    // weight here or they're unpullable (see lobEra note).
     static let classicEra = PackConfig(
         era: "classic",
         commonSlots: 8,
         uncommonSlots: 0,
         hasReverseHoloSlot: false,
         rareSlots: 1,
-        commonSlotWeights: [("Common", 1.0)],
+        commonSlotWeights: [
+            ("Common", 0.95),
+            ("Short Print", 0.05),
+        ],
         rareSlotWeights: [
             ("Rare", 0.60),
             ("Super Rare", 0.20),
@@ -245,11 +256,19 @@ extension PackConfig {
         uncommonSlots: 0,
         hasReverseHoloSlot: true,
         rareSlots: 1,
-        commonSlotWeights: [("Common", 1.0)],
+        commonSlotWeights: [
+            // Arc-V/VRAINS-era boosters still carry ~4 Short Prints per set —
+            // they need a weight here or they're unpullable (see lobEra note).
+            ("Common", 0.95),
+            ("Short Print", 0.05),
+        ],
         rareSlotWeights: [
-            ("Super Rare", 0.55),
+            ("Super Rare", 0.545),
             ("Ultra Rare", 0.25),
             ("Secret Rare", 0.16),
+            // Ultimate Rares persisted into early Arc-V sets (DUEA–CROS) and
+            // resurface in Rush-era reprints (RA05) — same unpullability rule.
+            ("Ultimate Rare", 0.005),
             ("Starlight Rare", 0.015),
             ("Quarter Century Secret Rare", 0.015),
             ("Collector's Rare", 0.005),

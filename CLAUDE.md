@@ -83,10 +83,11 @@ mapped from each set's `tcg_date`. Era buckets (rough):
 Source community wisdom: Yugipedia "Ultra Rare" article, Cardmarket "Box Math" series,
 YGOPRODeck's "Set Theory" articles.
 
-**Audit before shipping a bundle update:** run `python3 scripts/audit-rarity-coverage.py`, must exit 0. Three passes:
-- Engine → card-data: a rarity in a `PackConfig` weight table with no matching cards in any bundled set for that era. Silent drift — `PackPrefetcher`'s tier-aware fallback hides the bug.
-- Card-data → engine: a rarity in card data that no weight table can roll. Usually means new rarities (Ghost Rare reappearing, new Secret variants) need to be added to the era configs, or that garbage strings ("New", "European debut") slipped through `build_bundle.py` and need data-pipeline cleanup.
-- Hot pack reachability: for each era, the chase weights filtered to rank ≥ 3 must be non-empty and reachable in card data.
+**Audit before shipping a bundle update:** run `python3 scripts/audit-rarity-coverage.py`, must exit 0. Four passes:
+- Engine → card-data (failing): a rarity in a `PackConfig` weight table with no matching cards in any bundled set for that era. Silent drift — `PackPrefetcher`'s tier-aware fallback hides the bug. Known chase-variant-dedup absences (Ghost Rare in classic, Collector's Rare in modern — see §8) are suppressed via `KNOWN_DEDUPED_CHASE`.
+- Card-data → engine (informational, non-failing): a rarity in card data that no weight table can roll. Usually fine — tier fallback reaches it in the all-variant sets (Duel Terminal, Gold Series, Battle Pack) where these live. New strings appearing here after a bundle update deserve a look: either a new rarity needs an era-config slot, or garbage strings ("New", "European debut") slipped through `build_bundle.py`.
+- Hot pack reachability (failing): for each era, the chase weights filtered to rank ≥ 3 must be non-empty and reachable in card data.
+- Per-set reachability (failing): simulates `PackPrefetcher`'s slot-fill fallback chain per set; flags any card whose rarity can never be picked — i.e., a permanently incompletable collection. This is the pass that catches the "Spell Ruler stuck at 100/104" class of bug (Super Short Prints no LOB-era table rolled).
 
 The audit mirrors `PullRateEngine.swift`'s hardcoded era configs in Python — if you change those configs, update `ERA_WEIGHT_TABLES` in the audit too. Drift is partially self-detected via the cross-direction warnings.
 
