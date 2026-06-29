@@ -123,6 +123,13 @@ actor SetSyncService {
         let context = ModelContext(container)
         context.autosaveEnabled = false
 
+        // Re-apply user flags from the backup as cards are (re-)seeded. After a
+        // store wipe the cards rebuild from the bundle with default flags, so
+        // this restores favorites/wishlist for cards the user revisits. In normal
+        // operation these sets are empty for never-seen sets, so it's a no-op.
+        let favoriteIDs = CollectionBackup.favoriteIDs()
+        let wishlistIDs = CollectionBackup.wishlistIDs()
+
         // Cleanup: drop CardModel rows for this set whose printing is no
         // longer in the bundle (the dedup-by-lowest-rarity change is a
         // recent example — a chase variant that used to be canonical may
@@ -190,6 +197,8 @@ actor SetSyncService {
                 model.priceMarket = p
                 model.priceLastUpdated = Date()
             }
+            if favoriteIDs.contains(model.apiID) { model.isFavorite = true }
+            if wishlistIDs.contains(model.apiID) { model.isWishlisted = true }
             context.insert(model)
         }
         try context.save()

@@ -87,6 +87,12 @@ struct CollectionView: View {
             }
             .onAppear { rebuildIfNeeded() }
             .onChange(of: collectionStats.totalPulls) { _, _ in rebuildIfNeeded() }
+            // Owned cards are built by joining pull counts against `allCards`
+            // (CardModel). After a restore/wipe the CardModel rows re-seed
+            // *after* the pull counts return, so rebuild when the card set
+            // changes too — otherwise the grid stays empty until an app
+            // restart even though the data is present.
+            .onChange(of: allCards.count) { _, _ in rebuildOwnedCards() }
             .onChange(of: sortOption) { _, _ in refreshDisplay() }
             .onChange(of: filterRarity) { _, _ in refreshDisplay() }
             .onChange(of: filterFavorites) { _, _ in refreshDisplay() }

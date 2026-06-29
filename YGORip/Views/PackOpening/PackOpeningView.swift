@@ -1046,6 +1046,8 @@ struct PackOpeningView: View {
                 bgContext.insert(record)
             }
             try? bgContext.save()
+            // Refresh the recoverable backup of user data (off the hot path).
+            CollectionBackup.write(from: bgContext)
         }
     }
 

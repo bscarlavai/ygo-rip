@@ -10,6 +10,10 @@ struct SettingsView: View {
     @State private var showResetConfirmation = false
     @State private var showResetSuccess = false
     @State private var showDisclaimerSheet = false
+    @State private var backupInfo: CollectionBackup.RestoreInfo?
+    @State private var canRestore = false
+    @State private var showRestoreConfirmation = false
+    @State private var restoreResultMessage: String?
     #if DEBUG
     @State private var showDebugCrossPromo = false
     #endif
@@ -20,10 +24,10 @@ struct SettingsView: View {
                 premiumSection
                 preferencesSection
                 gameplaySection
+                dataSection
                 moreFromLavaiLabsSection
                 supportSection
                 legalSection
-                dangerZone
                 aboutSection
                 #if DEBUG
                 debugSection
@@ -35,6 +39,34 @@ struct SettingsView: View {
             .tint(Theme.accent)
             .foregroundStyle(Theme.primaryText)
             .task { if storeKit.offerings.isEmpty { await storeKit.loadOfferings() } }
+            .onAppear { refreshBackupState() }
+            .alert("Restore from Backup?", isPresented: $showRestoreConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Restore") {
+                    Task {
+                        let count = await CollectionRestore.perform(
+                            modelContext: modelContext,
+                            collectionStats: collectionStats
+                        )
+                        refreshBackupState()
+                        restoreResultMessage = count > 0
+                            ? "Restored \(count) cards. Refreshing prices in the background…"
+                            : "Nothing to restore."
+                    }
+                }
+            } message: {
+                if let info = backupInfo {
+                    Text("This re-adds \(info.recordCount) cards from your backup of \(info.savedAt.formatted(date: .abbreviated, time: .shortened)).")
+                }
+            }
+            .alert("Restore Complete", isPresented: Binding(
+                get: { restoreResultMessage != nil },
+                set: { if !$0 { restoreResultMessage = nil } }
+            )) {
+                Button("OK") {}
+            } message: {
+                Text(restoreResultMessage ?? "")
+            }
             .alert("Reset Collection", isPresented: $showResetConfirmation) {
                 Button("Cancel", role: .cancel) {}
                 Button("Delete Everything", role: .destructive) {
@@ -303,8 +335,37 @@ struct SettingsView: View {
 
     // MARK: - Danger Zone
 
-    private var dangerZone: some View {
+    private var dataSection: some View {
         Section {
+            if let info = backupInfo {
+                HStack {
+                    Label("Last Backup", systemImage: "externaldrive.fill.badge.checkmark")
+                    Spacer()
+                    Text("\(info.recordCount) cards")
+                        .foregroundStyle(Theme.tertiaryText)
+                }
+                HStack {
+                    Label {
+                        Text("Saved")
+                    } icon: {
+                        // Invisible placeholder so "Saved" (and the row
+                        // separator) line up under "Last Backup" without a
+                        // second, redundant drive icon.
+                        Image(systemName: "externaldrive.fill.badge.checkmark")
+                            .hidden()
+                    }
+                    Spacer()
+                    Text(info.savedAt.formatted(date: .abbreviated, time: .shortened))
+                        .foregroundStyle(Theme.tertiaryText)
+                }
+                Button {
+                    showRestoreConfirmation = true
+                } label: {
+                    Label("Restore from Backup", systemImage: "arrow.counterclockwise")
+                }
+                .disabled(!canRestore)
+            }
+
             Button(role: .destructive) {
                 showResetConfirmation = true
             } label: {
@@ -314,10 +375,20 @@ struct SettingsView: View {
             Text("Data")
                 .foregroundStyle(Theme.secondaryText)
         } footer: {
-            Text("Permanently deletes all pulled cards, history, and stats.")
+            Text(dataSectionFooter)
                 .foregroundStyle(Theme.tertiaryText)
         }
         .listRowBackground(Theme.cardSurface)
+    }
+
+    private var dataSectionFooter: String {
+        if canRestore {
+            return "Your collection looks empty. Restore re-adds your backed-up cards. Reset clears everything, including the backup."
+        }
+        if backupInfo != nil {
+            return "Your cards are backed up automatically. Reset permanently deletes everything, including the backup."
+        }
+        return "Open a pack to start a backup. Reset permanently deletes all pulled cards, history, and stats."
     }
 
     // MARK: - About
@@ -392,6 +463,12 @@ struct SettingsView: View {
                 showDebugCrossPromo = true
             } label: {
                 Label("Show Cross-Promo Modal", systemImage: "megaphone.fill")
+            }
+
+            Button(role: .destructive) {
+                simulateDataLoss()
+            } label: {
+                Label("Simulate Data Loss (keep backup)", systemImage: "exclamationmark.triangle.fill")
             }
         } header: {
             Text("Debug")
@@ -515,6 +592,32 @@ struct SettingsView: View {
         UserDefaults.standard.set(0, forKey: "packsOpenedToday")
         UserDefaults.standard.removeObject(forKey: "lastPackDate")
 
+        // Clear the recoverable backup to an empty snapshot. Without this, the
+        // wiped store + a stale non-empty backup would offer to restore on the
+        // next launch and resurrect the data the user just deleted.
+        CollectionBackup.clear()
+        refreshBackupState()
+
         showResetSuccess = true
     }
+
+    private func refreshBackupState() {
+        backupInfo = CollectionBackup.lastBackup()
+        canRestore = CollectionBackup.availableRestore(context: modelContext) != nil
+    }
+
+    #if DEBUG
+    /// Snapshots current data, then wipes the store to mimic a migration
+    /// data-loss — relaunch to see the restore prompt. Keeps the backup so the
+    /// prompt has something to offer; cards/sets re-seed from the bundle.
+    private func simulateDataLoss() {
+        CollectionBackup.write(from: modelContext)
+        try? modelContext.delete(model: PullRecord.self)
+        try? modelContext.delete(model: CardModel.self)
+        try? modelContext.delete(model: SetModel.self)
+        try? modelContext.save()
+        collectionStats.reset()
+        refreshBackupState()
+    }
+    #endif
 }
