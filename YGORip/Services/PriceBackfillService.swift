@@ -28,7 +28,13 @@ struct PriceBackfillService {
     /// instead of ~$253. The fix in `YGOPRODeckService.priceUSD(forSetCode:)`
     /// reads per-printing `set_price`. Existing installs need one more
     /// pass to overwrite the bad numbers.
-    private static let completedFlagKey = "priceBackfillCompleted_v2"
+    ///
+    /// v3 bump: per-printing `set_price` is `"0"` for modern/recent sets
+    /// (Arc-V onward, Sevens era, etc.), so those cards ended up with no
+    /// price at all. `priceUSD(forSetCode:)` now falls back to the
+    /// design-level `tcgplayer_price`. Existing installs need one more pass
+    /// to fill in the previously-null modern prices.
+    private static let completedFlagKey = "priceBackfillCompleted_v3"
     private static let chunkSize = 10
     private static let interChunkDelayNanos: UInt64 = 1_000_000_000  // 1s
     /// Older-than threshold for "stale enough to refresh." Matches the

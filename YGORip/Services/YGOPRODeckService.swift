@@ -70,18 +70,41 @@ struct YGOCard: Decodable {
     let id: Int
     let name: String
     /// One entry per printing across every set. We match by `set_code` to
-    /// get per-printing prices — `card_prices[].tcgplayer_price` is per
-    /// card design and returns the floor across all reprints, which
-    /// understates chase cards by 1–2 orders of magnitude.
+    /// get per-printing prices — this is the accurate number (Blue-Eyes
+    /// LOB-001 at ~$253, not the reprint floor).
     let card_sets: [YGOPrinting]?
+    /// Per-card-design prices (one element). The `tcgplayer_price` here is
+    /// the floor across all reprints — it understates multi-rarity chase
+    /// cards, but it's populated even when per-printing `set_price` isn't.
+    /// Used only as a fallback below.
+    let card_prices: [YGOCardPrice]?
 
     /// TCGPlayer price for the given printing (`set_code` like "LOB-EN001").
-    /// Returns nil if YGOPRODeck has no per-printing price for that code.
+    ///
+    /// Prefers the per-printing `set_price` (accurate for older sets), and
+    /// falls back to the design-level `card_prices[].tcgplayer_price` when
+    /// that's missing. YGOPRODeck returns `set_price: "0"` for modern/recent
+    /// sets (Arc-V onward, Sevens era, etc.), so without this fallback those
+    /// eras show no price at all — both in the bundle and on live refresh.
+    ///
+    /// The fallback's known weakness (design-level price is the floor across
+    /// all reprints, understating chase variants) doesn't bite us: the app
+    /// dedupes chase variants to the base printing (see CLAUDE.md §8), so the
+    /// floor *is* the number we display. Returns nil only when neither field
+    /// carries a usable price.
     func priceUSD(forSetCode code: String) -> Double? {
-        guard let printing = card_sets?.first(where: { $0.set_code == code }),
-              let raw = printing.set_price,
-              raw != "0.00", raw != "0",
-              let value = Double(raw) else { return nil }
+        if let printing = card_sets?.first(where: { $0.set_code == code }),
+           let value = Self.parsePrice(printing.set_price) {
+            return value
+        }
+        return Self.parsePrice(card_prices?.first?.tcgplayer_price)
+    }
+
+    /// Parse a YGOPRODeck price string. Treats "0"/"0.00"/empty/nil as
+    /// "no data" → nil, so a zeroed field falls through to the next source.
+    private static func parsePrice(_ raw: String?) -> Double? {
+        guard let raw, raw != "0.00", raw != "0",
+              let value = Double(raw), value > 0 else { return nil }
         return value
     }
 }
@@ -91,6 +114,12 @@ struct YGOCard: Decodable {
 struct YGOPrinting: Decodable {
     let set_code: String
     let set_price: String?
+}
+
+/// Per-card-design price record. Only `tcgplayer_price` is consumed; the
+/// other market fields (cardmarket, ebay, amazon, coolstuffinc) are ignored.
+struct YGOCardPrice: Decodable {
+    let tcgplayer_price: String?
 }
 
 // MARK: - Errors

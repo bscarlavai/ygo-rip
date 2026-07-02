@@ -502,13 +502,16 @@ def index_printings(cards):
     variants are something we explicitly add later with their own
     treatments.
 
-    Price is per-printing: `card_sets[].set_price`, NOT
-    `card_prices[].tcgplayer_price`. The latter is per card design (per
-    `id`) and returns the floor across every reprint — for LOB-001
-    Blue-Eyes Ultra Rare it returns $0.14 (the cheap Starter Deck
-    reprint) instead of the ~$300 LOB 1st Edition. set_price doesn't
-    break 1st Edition vs Unlimited apart either, but it lands in the
-    correct order of magnitude.
+    Price prefers per-printing `card_sets[].set_price` (accurate for older
+    sets — LOB-001 Blue-Eyes Ultra Rare lands at ~$300, not the cheap
+    Starter Deck reprint floor), and falls back to the design-level
+    `card_prices[].tcgplayer_price` when that's missing. YGOPRODeck returns
+    `set_price: "0"` for modern/recent sets (Arc-V onward, Sevens era, etc.),
+    so without the fallback those eras ship with `price: null` and the app
+    shows no price at all. The fallback is the reprint floor, which
+    understates multi-rarity chase cards — but the app dedupes chase variants
+    to the base printing (see CLAUDE.md §8), so the floor is the number we
+    display. Mirrors `YGOPRODeckService.priceUSD(forSetCode:)`.
     """
     # First pass: collect all (set_name, card_id) → best printing
     best = {}  # (set_name, card_id) → (priority, printing dict)
@@ -516,15 +519,23 @@ def index_printings(cards):
         cid = card.get("id")
         if cid is None:
             continue
+        # Design-level fallback price (per card `id`, shared across printings).
+        design_price = None
+        card_prices = card.get("card_prices") or []
+        if card_prices:
+            tcg = card_prices[0].get("tcgplayer_price")
+            if tcg and tcg not in ("0", "0.00"):
+                design_price = tcg
         for printing in card.get("card_sets", []):
             set_name = printing.get("set_name")
             set_code_full = printing.get("set_code", "")
             rarity = _normalize_rarity(printing.get("set_rarity", "Common"))
             set_price = printing.get("set_price")
             # Treat "0.00" / "0" / "" as no data — better to render "——"
-            # than to claim a card is free.
+            # than to claim a card is free. Fall back to the design-level
+            # TCGPlayer price so modern sets aren't priceless.
             if not set_price or set_price in ("0", "0.00"):
-                set_price = None
+                set_price = design_price
             if not set_name:
                 continue
             priority = (_printing_priority(set_code_full), _pull_frequency_rank(rarity))
