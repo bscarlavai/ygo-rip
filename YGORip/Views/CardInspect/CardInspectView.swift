@@ -206,39 +206,62 @@ struct CardInspectView: View {
                     .foregroundStyle(Theme.rarityColor(for: card.rarity))
             }
 
-            HStack(spacing: Theme.spacingMD) {
+            if let low = listingOnlyLow {
+                // No market aggregate upstream, but TCGPlayer has live listings —
+                // the API returns `{market: null, low: X}`. Show the recovered
+                // value as a listing, never as the market price.
                 VStack(spacing: 2) {
-                    Text("Market")
+                    Text("Lowest Listing")
                         .font(.caption2)
                         .foregroundStyle(Theme.tertiaryText)
-                    if isRefreshingPrice && card.priceMarket == nil {
-                        ProgressView()
-                            .tint(Theme.tertiaryText)
-                            .scaleEffect(0.7)
-                            .frame(height: 20)
-                    } else {
-                        Text(card.priceMarket.map { String(format: "$%.2f", $0) } ?? "——")
-                            .font(.subheadline.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(card.priceMarket != nil ? Theme.accent : Theme.tertiaryText)
+                    Text(String(format: "$%.2f", low))
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.green)
+                }
+                .padding(.top, Theme.spacingXS)
+            } else if isConfirmedUnpriced {
+                // Terminal tri-state (client-migration.md §8): a fetch resolved
+                // this printing and it has neither a market nor a listing price.
+                // Framed as a property of the card, not an app fault.
+                Text("No market price")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Theme.tertiaryText)
+                    .padding(.top, Theme.spacingXS)
+            } else {
+                HStack(spacing: Theme.spacingMD) {
+                    VStack(spacing: 2) {
+                        Text("Market")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.tertiaryText)
+                        if isRefreshingPrice && card.priceMarket == nil {
+                            ProgressView()
+                                .tint(Theme.tertiaryText)
+                                .scaleEffect(0.7)
+                                .frame(height: 20)
+                        } else {
+                            Text(card.priceMarket.map { String(format: "$%.2f", $0) } ?? "——")
+                                .font(.subheadline.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(card.priceMarket != nil ? Theme.accent : Theme.tertiaryText)
+                        }
+                    }
+                    VStack(spacing: 2) {
+                        Text("Lowest")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.tertiaryText)
+                        if isRefreshingPrice && card.priceLow == nil {
+                            ProgressView()
+                                .tint(Theme.tertiaryText)
+                                .scaleEffect(0.7)
+                                .frame(height: 20)
+                        } else {
+                            Text(card.priceLow.map { String(format: "$%.2f", $0) } ?? "——")
+                                .font(.subheadline.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(card.priceLow != nil ? .green : Theme.tertiaryText)
+                        }
                     }
                 }
-                VStack(spacing: 2) {
-                    Text("Lowest")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.tertiaryText)
-                    if isRefreshingPrice && card.priceLow == nil {
-                        ProgressView()
-                            .tint(Theme.tertiaryText)
-                            .scaleEffect(0.7)
-                            .frame(height: 20)
-                    } else {
-                        Text(card.priceLow.map { String(format: "$%.2f", $0) } ?? "——")
-                            .font(.subheadline.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(card.priceLow != nil ? .green : Theme.tertiaryText)
-                    }
-                }
+                .padding(.top, Theme.spacingXS)
             }
-            .padding(.top, Theme.spacingXS)
         }
     }
 
@@ -321,29 +344,36 @@ struct CardInspectView: View {
 
     // MARK: - Price Refresh
 
-    private func refreshPriceIfStale() async {
-        // Refresh if: no price data, or price is older than 24h
-        let hasPrice = card.priceMarket != nil
-        if hasPrice, let lastUpdated = card.priceLastUpdated,
-           lastUpdated.timeIntervalSinceNow > -86400 {
-            return  // Fresh enough
-        }
+    /// Resolved with no market aggregate but a recovered lowest-listing price
+    /// (the API keeps `{market: null, low: X}` for cards TCGPlayer lists but
+    /// doesn't compute a market for). Checked before `isConfirmedUnpriced` so
+    /// these render "Lowest Listing $X" rather than "No market price".
+    private var listingOnlyLow: Double? {
+        guard !isRefreshingPrice, card.priceMarket == nil, card.priceLastUpdated != nil,
+              let low = card.priceLow else { return nil }
+        return low
+    }
 
+    /// Terminal "no market price" state (client-migration.md §8 tri-state): a
+    /// fetch resolved this printing and it carries neither a market nor a listing
+    /// price (unmapped set, or absent from an otherwise-priced set). Distinct from
+    /// "not yet fetched" (`priceLastUpdated == nil` → spinner / "——"), which still
+    /// tries the API, and from `listingOnlyLow` (handled first).
+    private var isConfirmedUnpriced: Bool {
+        card.priceMarket == nil && card.priceLastUpdated != nil && !isRefreshingPrice
+    }
+
+    private func refreshPriceIfStale() async {
         isRefreshingPrice = true
-        let api = YGOPRODeckService()
-        do {
-            let ygoCard = try await api.fetchCard(id: card.ygoID)
-            if let market = ygoCard.priceUSD(forSetCode: card.number) {
-                card.priceMarket = market
-                // YGOPRODeck doesn't expose a separate "low" — reuse market for both.
-                card.priceLow = market
-            }
-            // Always mark as updated so we don't re-fetch constantly for cards with no price.
-            card.priceLastUpdated = .now
-            try? modelContext.save()
-        } catch {
-            // Silently fail — stale price is better than no price
-        }
+        // One batch request prices the whole set (edge-cached 24h); PriceRefresh
+        // gates on staleness, writes market/low to disk, and — on a 404 or a card
+        // absent from a priced set — clears the seed so it reads "No market price"
+        // instead of a frozen number. A transient failure leaves prices untouched.
+        await PriceRefresh.refresh(
+            setID: card.setID,
+            modelContext: modelContext,
+            collectionStats: collectionStats
+        )
         isRefreshingPrice = false
     }
 }

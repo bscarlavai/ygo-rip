@@ -181,10 +181,14 @@ struct PackOpeningView: View {
             // .summary so the parallel API calls don't compete with the
             // pack's image downloads. Mirrors poke-rip's PackOpeningView.
             if new == .summary {
-                if let pulled = preloadedPack {
-                    Task { @MainActor in
-                        await Self.refreshPricesForPulledCards(pulled, modelContext: modelContext)
-                    }
+                // Every card in this pack shares `set`, so one batch request
+                // prices them all — replacing the old per-card fetch loop.
+                Task { @MainActor in
+                    await PriceRefresh.refresh(
+                        setID: set.apiID,
+                        modelContext: modelContext,
+                        collectionStats: collectionStats
+                    )
                 }
                 if appState.canOpenPack {
                     PackPrefetcher.shared.prefetch(
@@ -935,57 +939,6 @@ struct PackOpeningView: View {
             // card-reading time instead of swallowing the flip animation.
             savePackIfNeeded()
         }
-    }
-
-    /// Batch-refresh live YGOPRODeck prices for the just-pulled cards.
-    /// Triggered on entry to the `.summary` phase so Stats' "Collection
-    /// Value" reflects today's market without the user having to inspect
-    /// each card individually. Skips cards whose price is already fresh
-    /// (<24h old); ones that fail to refresh keep their bundled price
-    /// (better stale than missing).
-    @MainActor
-    private static func refreshPricesForPulledCards(_ pulled: [PulledCard], modelContext: ModelContext) async {
-        let needsRefresh = pulled.filter { pulled in
-            let card = pulled.model
-            if card.priceMarket == nil { return true }
-            if let last = card.priceLastUpdated, last.timeIntervalSinceNow < -86400 { return true }
-            return false
-        }
-        guard !needsRefresh.isEmpty else { return }
-
-        let api = YGOPRODeckService()
-        // Key by apiID (per-printing) rather than ygoID — the same card
-        // design pulled at two rarities/sets in the same pack would
-        // otherwise collide and one printing would lose its price.
-        var priced: [String: Double] = [:]
-        await withTaskGroup(of: (String, Double)?.self) { group in
-            for pulled in needsRefresh {
-                let ygoID = pulled.model.ygoID
-                let apiID = pulled.model.apiID
-                let setCode = pulled.model.number
-                group.addTask {
-                    guard let card = try? await api.fetchCard(id: ygoID),
-                          let price = card.priceUSD(forSetCode: setCode) else { return nil }
-                    return (apiID, price)
-                }
-            }
-            for await item in group {
-                if let (id, price) = item { priced[id] = price }
-            }
-        }
-
-        let now = Date()
-        for pulled in needsRefresh {
-            // Always update the timestamp — for cards with no API price we
-            // still don't want to retry every summary visit.
-            pulled.model.priceLastUpdated = now
-            if let market = priced[pulled.model.apiID] {
-                pulled.model.priceMarket = market
-                // YGOPRODeck doesn't expose a separate "low" — reuse market.
-                pulled.model.priceLow = market
-            }
-        }
-        try? modelContext.save()
     }
 
     /// Persist this pack's PullRecords and decrement the pack counter.

@@ -1,46 +1,26 @@
 import Foundation
 import SwiftData
 
-/// One-shot backfill of YGOPRODeck market prices for cards the user
-/// already owns. The pack-time refresh in `PackOpeningView` keeps
-/// newly-pulled cards fresh on the `.summary` phase, but cards pulled
-/// before that path shipped still hold whatever price `SetSyncService`
-/// set during initial bundle sync (which can be months stale, or nil
-/// for printings YGOPRODeck didn't ship a price for). Without this,
-/// Stats' "Collection Value" would understate forever for those users.
+/// One-shot backfill of market prices for the user's owned cards, via the
+/// per-set batch price API (`PriceRefresh`). Set-open / card-inspect / pack
+/// paths keep freshly-touched sets current, but a user can own cards from sets
+/// they haven't revisited since this shipped; without this, Stats' "Collection
+/// Value" would keep showing pre-migration prices for those until a revisit.
 ///
-/// Runs once per install, gated by a UserDefaults flag. Scopes only to
-/// **owned** cards (keys of `CollectionStats.pullCountByCardID`) and
-/// only those whose price is nil or older than the freshness threshold.
-/// Chunks API calls (10 in parallel, 1s gap) to stay well under
-/// YGOPRODeck's 20 req/sec rate limit. Saves and bumps
-/// `CollectionStats.priceRefreshTick` after each chunk so any open
-/// Stats view picks up the new total mid-run.
+/// Runs once per install, gated by a UserDefaults flag. Iterates the **distinct
+/// sets** among owned cards (`CollectionStats.pullCountByCardID` → each card's
+/// `setID`) and refreshes each set with one request — far fewer calls than the
+/// old per-card YGOPRODeck backfill. Leaves the gate open if the API was
+/// unreachable so the next launch retries.
 @MainActor
 struct PriceBackfillService {
-    /// Bump the suffix when scheduling another backfill in the future
-    /// (e.g. if we change the freshness threshold semantics or want to
-    /// re-fetch for everyone).
-    ///
-    /// v2 bump: the v1 backfill (and the original bundled prices) used
-    /// YGOPRODeck's per-card-design `tcgplayer_price`, which returns the
-    /// floor across every reprint — Blue-Eyes LOB-001 showed $0.14
-    /// instead of ~$253. The fix in `YGOPRODeckService.priceUSD(forSetCode:)`
-    /// reads per-printing `set_price`. Existing installs need one more
-    /// pass to overwrite the bad numbers.
-    ///
-    /// v3 bump: per-printing `set_price` is `"0"` for modern/recent sets
-    /// (Arc-V onward, Sevens era, etc.), so those cards ended up with no
-    /// price at all. `priceUSD(forSetCode:)` now falls back to the
-    /// design-level `tcgplayer_price`. Existing installs need one more pass
-    /// to fill in the previously-null modern prices.
-    private static let completedFlagKey = "priceBackfillCompleted_v3"
-    private static let chunkSize = 10
-    private static let interChunkDelayNanos: UInt64 = 1_000_000_000  // 1s
-    /// Older-than threshold for "stale enough to refresh." Matches the
-    /// pack-time refresh in PackOpeningView so a card that was just
-    /// pulled-and-refreshed isn't redone.
-    private static let stalenessSeconds: TimeInterval = 24 * 60 * 60
+    /// Bump the suffix when scheduling another backfill in the future (e.g. if we
+    /// change the freshness threshold semantics or want to re-fetch for everyone).
+    /// `_v4` = switched from per-card YGOPRODeck to the per-set price API (also
+    /// the first pass that fills the restored `priceLow` from real market data).
+    private static let completedFlagKey = "priceBackfillCompleted_v4"
+    /// Gentle spacing between set requests. Well under the API's 200/60s limit.
+    private static let interSetDelayNanos: UInt64 = 250_000_000  // 0.25s
 
     static var hasRun: Bool {
         UserDefaults.standard.bool(forKey: completedFlagKey)
@@ -58,15 +38,13 @@ struct PriceBackfillService {
 
     /// In-flight guard. `.task` on HomeView fires on each appear; without
     /// this, navigating away and back during a backfill would spawn a
-    /// second concurrent run hammering the API. @MainActor scope means
-    /// no atomicity concern.
+    /// second concurrent run. @MainActor scope means no atomicity concern.
     private static var isRunning = false
 
-    /// Run the backfill if it hasn't been run before. Safe to call from
-    /// every app launch — short-circuits on the flag, on network absence,
-    /// and on a concurrent run. Catastrophic API failure (no successful
-    /// fetches across all chunks) leaves the gate open so next launch
-    /// retries; partial success is treated as success.
+    /// Run the backfill if it hasn't been run before. Safe to call from every app
+    /// launch — short-circuits on the flag, on network absence, and on a
+    /// concurrent run. Marks complete only if every owned set was reachable; if
+    /// any set couldn't reach the API, the gate stays open for the next launch.
     static func runIfNeeded(modelContext: ModelContext, collectionStats: CollectionStats) async {
         guard !hasRun else { return }
         guard !isRunning else { return }
@@ -76,91 +54,42 @@ struct PriceBackfillService {
 
         let ownedAPIIDs = Set(collectionStats.pullCountByCardID.keys)
         guard !ownedAPIIDs.isEmpty else {
-            // No owned cards yet — nothing to refresh. Still mark complete
-            // so we don't re-evaluate on every launch.
+            // No owned cards yet — nothing to refresh. Still mark complete so we
+            // don't re-evaluate on every launch.
             markRun()
             return
         }
 
-        // Fetch all owned CardModels, then filter to those needing refresh.
-        let allCards: [CardModel]
+        let ownedCards: [CardModel]
         do {
-            allCards = try modelContext.fetch(FetchDescriptor<CardModel>(
+            ownedCards = try modelContext.fetch(FetchDescriptor<CardModel>(
                 predicate: #Predicate { ownedAPIIDs.contains($0.apiID) }
             ))
         } catch {
             return  // SwiftData error; will retry next launch
         }
 
-        let now = Date()
-        let stale = allCards.filter { card in
-            if card.priceMarket == nil { return true }
-            guard let last = card.priceLastUpdated else { return true }
-            return now.timeIntervalSince(last) > stalenessSeconds
-        }
-        guard !stale.isEmpty else {
-            markRun()
-            return
-        }
+        let ownedSetIDs = Set(ownedCards.map(\.setID)).sorted()
+        var allReachable = true
 
-        let api = YGOPRODeckService()
-        let chunks = stride(from: 0, to: stale.count, by: chunkSize).map {
-            Array(stale[$0..<min($0 + chunkSize, stale.count)])
-        }
-        // Track total successful price writes across the run. If we
-        // finish with zero, that means YGOPRODeck was effectively
-        // unreachable the whole time — don't mark complete or we'd
-        // permanently skip the backfill on the next launch.
-        var totalPriced = 0
+        for (index, setID) in ownedSetIDs.enumerated() {
+            // PriceRefresh applies to the whole set on disk and bumps
+            // priceRefreshTick, so an open Stats view picks up the new total.
+            let reached = await PriceRefresh.refresh(
+                setID: setID,
+                modelContext: modelContext,
+                collectionStats: collectionStats
+            )
+            if !reached { allReachable = false }
 
-        for (index, chunk) in chunks.enumerated() {
-            // Key by apiID (per-printing) — same card design owned at
-            // two different set printings must each get its own price.
-            var priced: [String: Double] = [:]
-            await withTaskGroup(of: (String, Double)?.self) { group in
-                for card in chunk {
-                    let ygoID = card.ygoID
-                    let apiID = card.apiID
-                    let setCode = card.number
-                    group.addTask {
-                        guard let fetched = try? await api.fetchCard(id: ygoID),
-                              let price = fetched.priceUSD(forSetCode: setCode) else { return nil }
-                        return (apiID, price)
-                    }
-                }
-                for await item in group {
-                    if let (id, price) = item { priced[id] = price }
-                }
-            }
-
-            // Write back this chunk's results. Only stamp cards that
-            // actually got data; leaving the timestamp untouched on
-            // unfetched cards keeps them eligible for the next backfill
-            // attempt if YGOPRODeck was temporarily flaky.
-            let stamp = Date()
-            for card in chunk {
-                guard let market = priced[card.apiID] else { continue }
-                card.priceMarket = market
-                // YGOPRODeck doesn't expose a separate "low" — reuse market.
-                card.priceLow = market
-                card.priceLastUpdated = stamp
-                totalPriced += 1
-            }
-            try? modelContext.save()
-            collectionStats.priceRefreshTick &+= 1
-
-            // Pause between chunks. YGOPRODeck's hard rate limit is
-            // 20 req/sec — at 10 parallel in ~200ms followed by a 1s
-            // gap we sit at ~10 req/sec average, well within bounds.
-            if index < chunks.count - 1 {
-                try? await Task.sleep(nanoseconds: interChunkDelayNanos)
+            if index < ownedSetIDs.count - 1 {
+                try? await Task.sleep(nanoseconds: interSetDelayNanos)
             }
         }
 
-        // Only commit the "completed" flag if we got at least one
-        // successful fetch. A zero-success run almost certainly means
-        // the API was unreachable — let the next launch retry.
-        if totalPriced > 0 {
+        // Only commit "completed" if nothing was left unreachable; otherwise let
+        // the next launch retry the sets that failed (fresh ones no-op instantly).
+        if allReachable {
             markRun()
         }
     }

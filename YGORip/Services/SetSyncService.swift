@@ -193,9 +193,14 @@ actor SetSyncService {
                 linkval: def.linkval,
                 linkmarkersRaw: def.linkmarkers?.joined(separator: ",")
             )
+            // Seed the bundled market price only. Leave `priceLastUpdated` nil so
+            // the first live touch of this set (browse / inspect / pack) refreshes
+            // it right away and fills `priceLow` — a stamped-now seed would look
+            // "fresh" and block the live fetch for 24h. A priceless seed likewise
+            // stays nil-stamped so it reads "not yet resolved" (client-migration.md
+            // §8), not a confirmed "No market price".
             if let price = printing.price, let p = Double(price) {
                 model.priceMarket = p
-                model.priceLastUpdated = Date()
             }
             if favoriteIDs.contains(model.apiID) { model.isFavorite = true }
             if wishlistIDs.contains(model.apiID) { model.isWishlisted = true }
