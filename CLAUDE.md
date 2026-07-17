@@ -270,14 +270,25 @@ Bundled/
 
 ### Building the bundle
 ```bash
-cd data-pipeline && python3 build_bundle.py
+cd data-pipeline && python3 build_bundle.py --force-refresh   # new-set refresh: re-download YGOPRODeck dumps
+cd data-pipeline && python3 build_bundle.py                   # rebuild from cached raw/ dumps (seconds)
 ```
-Pulls YGOJSON aggregated dump + YGOPRODeck card data, mirrors set logos from
-YGOJSON `locales[].image` (fallback: Yugipedia `<SETCODE>-LogoEN.png`), assigns
-each set an era from `tcg_date`, emits trimmed JSON + logo PNGs into
-`YGORip/Resources/Bundled/`. Idempotent — re-runs use cached raw files.
+Downloads YGOPRODeck `cardsets.php` + `cardinfo.php` into `data-pipeline/raw/`
+(cached; `--force-refresh` to re-pull when new sets release), dedupes set-code
+collisions, assigns eras/shelves from `tcg_date`, picks per-set `featuredCardID`,
+and emits trimmed JSON into `YGORip/Resources/Bundled/`. Full rebuild is always
+the right move — dedup winners, featured-card assignment, and stale-file cleanup
+are global decisions; there is no partial/append mode.
 
-*(Pipeline is currently a placeholder ported from mtg-rip — see follow-up tasks for the rewrite.)*
+The Yugipedia set-logo scrape is opt-in (`--logos`) and vestigial — the app
+renders boss-card art, and `Resources/Bundled` is a folder reference that ships
+wholesale in the app binary, so logo PNGs must never live there (the cache is
+`data-pipeline/raw/set-logos/`).
+
+After a refresh: run `python3 scripts/audit-rarity-coverage.py` (must exit 0),
+check for new/removed rarity strings vs the prior bundle, and map any new sets
+in `~/code/tcg-price-api` (see the tcg-price-coverage skill) or their cards
+ship price-less.
 
 ### SwiftData mutations
 - Always wrap in `withAnimation` for coordinated @Query re-evaluation
