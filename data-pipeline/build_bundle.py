@@ -10,15 +10,17 @@ Output: YGORip/Resources/Bundled/
   sets.json              — array of set records (code, name, tcg_date, era, shelf, logoAsset, logoStyle)
   cards.json             — global card index keyed by card ID (deduped card definitions)
   set-cards-<code>.json  — per-set printing records: {id, rarity, code, price}
-  set-logos/<code>.png   — mirrored logo PNGs (one-time scrape)
+
+Set-logo scrape (raw/set-logos/, opt-in via --logos) is vestigial: the app
+renders boss-card cropped art on Home tiles and never reads logo PNGs.
 
 Pack composition is era-driven and hand-authored in Swift (PullRateEngine). Every set
 opens as a foil pack with its era's rarity distribution — no product-type-specific
 configs (Structure / Tin / Premium / etc. all use their tcg_date era's odds).
 
 Usage:
-  python3 build_bundle.py                # full build (slow first run, ~5-15 min for logos)
-  python3 build_bundle.py --no-logos     # skip the slow Yugipedia logo fetch
+  python3 build_bundle.py                # full build (fast — no network beyond cached dumps)
+  python3 build_bundle.py --force-refresh  # re-download YGOPRODeck dumps (new sets)
   python3 build_bundle.py --sets-only    # just rebuild sets.json (fast)
 """
 
@@ -36,7 +38,11 @@ RAW = ROOT / "raw"
 RAW.mkdir(exist_ok=True)
 OUT = ROOT.parent / "YGORip" / "Resources" / "Bundled"
 OUT.mkdir(parents=True, exist_ok=True)
-LOGOS_OUT = OUT / "set-logos"
+# Logo scrape cache lives OUTSIDE the app bundle: Resources/Bundled is a
+# folder reference in project.yml, so anything under it ships in the app
+# binary — and no Swift code uses set logos anymore (Home tiles render
+# boss-card cropped art instead).
+LOGOS_OUT = RAW / "set-logos"
 LOGOS_OUT.mkdir(exist_ok=True)
 
 YGOPRODECK_BASE = "https://db.ygoprodeck.com/api/v7"
@@ -873,7 +879,7 @@ def validate_bundle():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--no-logos", action="store_true", help="Skip set-logo scrape (fast iteration)")
+    ap.add_argument("--logos", action="store_true", help="Run the Yugipedia set-logo scrape (slow; logos are unused by the app — off by default)")
     ap.add_argument("--sets-only", action="store_true", help="Only rebuild sets.json (assumes raw/ is populated)")
     ap.add_argument("--force-refresh", action="store_true", help="Re-download YGOPRODeck dumps even if cached")
     ap.add_argument("--validate-only", action="store_true", help="Skip build, just audit the on-disk bundle")
@@ -1016,7 +1022,7 @@ def main():
     logos_fetched = 0
     logos_missing = []
     logo_style_counts = {"logo": 0, "packArt": 0}
-    if not args.no_logos and not args.sets_only:
+    if args.logos and not args.sets_only:
         print(f"\nFetching set logos from Yugipedia (slow — ~1 req/sec)...", file=sys.stderr)
         for record in set_records:
             path, style = fetch_set_logo(record["code"])
@@ -1050,7 +1056,7 @@ def main():
     sets_size = (OUT / "sets.json").stat().st_size
     print(f"  sets.json:              {sets_size/1024:.0f} KB", file=sys.stderr)
 
-    if not args.no_logos and not args.sets_only:
+    if args.logos and not args.sets_only:
         logos_size = sum(p.stat().st_size for p in LOGOS_OUT.glob("*.png"))
         print(f"  set-logos/:             {logos_size/1024/1024:.1f} MB ({logos_fetched} files)", file=sys.stderr)
         print(f"    Style breakdown:      logo={logo_style_counts.get('logo', 0)}, packArt={logo_style_counts.get('packArt', 0)}", file=sys.stderr)
