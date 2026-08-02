@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// Client for the self-hosted Lavai Labs pricing service (`rip-prices.lavailabs.com`).
+/// Client for the self-hosted Lavai Labs pricing service (`tcg-prices.com`).
 ///
 /// Replaces the old per-card YGOPRODeck price fetches. The primitive here is the
 /// **per-set batch**: one request prices an entire set (edge-cached 24h), keyed
@@ -27,7 +27,7 @@ import SwiftData
 actor PriceService {
     static let shared = PriceService()
 
-    private let baseURL = URL(string: "https://rip-prices.lavailabs.com")!
+    private let baseURL = URL(string: "https://tcg-prices.com")!
     private let session: URLSession
     private let decoder = JSONDecoder()
 
