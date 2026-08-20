@@ -20,9 +20,11 @@ inline half3 fs_colorDodge(half3 base, half3 blend) {
                   blend >= half3(0.999h));
 }
 
-[[stitchable]] half4 foilPassthrough(float2 position, half4 color) {
-    return color;
-}
+// NOTE: there is deliberately no second "passthrough" shader here. An unfoiled
+// card is `cardShimmer` with zeroed parameters, because swapping which
+// function a single `.colorEffect` points at changes the argument count and
+// aborts inside SwiftUI's RenderBox. See the comment on
+// `FoilShaderModifier.shader()` for the full stack.
 
 // One foil shader for all rarities. In MTG, Scryfall returns the *non-foil*
 // card image — the shader is responsible for rendering the foil treatment
@@ -41,6 +43,12 @@ inline half3 fs_colorDodge(half3 base, half3 blend) {
         return color;
     }
     if (size.x < 1.0 || size.y < 1.0) {
+        return color;
+    }
+    // Unfoiled cards come through here with every parameter at zero, which the
+    // math below already resolves to an exact passthrough. Short-circuiting is
+    // purely for cost: it skips the exp() and hash work on every unfoiled card.
+    if (sheenStrength <= 0.0 && rainbowSaturation <= 0.0 && sparkleDensity <= 0.0) {
         return color;
     }
 

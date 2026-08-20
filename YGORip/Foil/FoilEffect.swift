@@ -23,10 +23,23 @@ struct FoilShaderModifier: ViewModifier {
             .colorEffect(shader())
     }
 
+    /// Always `cardShimmer`, never a second function — `.colorEffect` is a
+    /// single render node, and SwiftUI updates it in place when the view it's
+    /// attached to keeps its structural position. Returning a shader with a
+    /// *different argument count* from the previous render makes
+    /// `ShaderVectorData.updating(rbShader:)` reconcile the old argument
+    /// vector against the new `RBShader`, walk past its last argument, and
+    /// `abort` in `RB::precondition_failure`.
+    ///
+    /// Cards occupy the same position in the hierarchy during a reveal and in
+    /// card inspect, so an unfoiled card followed by a foiled one crossed a
+    /// 0-argument → 5-argument boundary. This was the top App Store crash in
+    /// PokeRip, which shares this file; it is fixed here pre-emptively.
+    ///
+    /// `.none` is expressed as zeroed parameters instead. That's pixel-exact,
+    /// not an approximation: with all three at zero the sheen and sparkle
+    /// layers are zero and `fs_colorDodge(base, 0)` is `base / 1.0`.
     private func shader() -> Shader {
-        if treatment == .none {
-            return ShaderLibrary.foilPassthrough()
-        }
         let p = Self.params(for: treatment)
         return ShaderLibrary.cardShimmer(
             .float2(Float(size.width), Float(size.height)),
@@ -86,7 +99,6 @@ struct FoilRotationModifier: ViewModifier {
 @MainActor
 func compileFoilShaders() async {
     let shaders: [Shader] = [
-        ShaderLibrary.foilPassthrough(),
         ShaderLibrary.cardShimmer(
             .float2(100, 100),
             .float2(0, 0),
