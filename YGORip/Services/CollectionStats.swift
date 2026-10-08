@@ -169,6 +169,18 @@ final class CollectionStats {
                 let descriptor = FetchDescriptor<PullRecord>()
                 let records = (try? bgContext.fetch(descriptor)) ?? []
 
+                // `PullRecord.rarity` is a snapshot from pull time. Once a bundle
+                // correction re-tiers a card (SetSyncService refreshes the live
+                // row), every other screen shows the new rarity while Stats
+                // would count the old one forever — so read the live CardModel.
+                // `propertiesToFetch` keeps this to two fields; it runs at launch.
+                var cardDescriptor = FetchDescriptor<CardModel>()
+                cardDescriptor.propertiesToFetch = [\.apiID, \.rarity]
+                let liveRarity = Dictionary(
+                    ((try? bgContext.fetch(cardDescriptor)) ?? []).map { ($0.apiID, $0.rarity) },
+                    uniquingKeysWith: { first, _ in first }
+                )
+
                 var pullCount: [String: Int] = [:]
                 var pullDates: [String: (first: Date, last: Date)] = [:]
                 var rarityCounts: [String: Int] = [:]
@@ -189,7 +201,9 @@ final class CollectionStats {
                         pullDates[cid] = (first: pulledAt, last: pulledAt)
                     }
 
-                    rarityCounts[record.rarity, default: 0] += 1
+                    // Snapshot only if the card row is missing (a pull implies a
+                    // synced set) — a stale count beats dropping the pull.
+                    rarityCounts[liveRarity[cid] ?? record.rarity, default: 0] += 1
                     ownedBySet[record.setID, default: []].insert(cid)
                     sessionsBySet[record.setID, default: []].insert(record.packSessionID)
                 }
