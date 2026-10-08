@@ -130,6 +130,17 @@ final class CardModel {
     /// Whether this card qualifies as "rare" (for shadows, badges, etc.).
     var isRare: Bool { rarityTier >= 1 }
 
+    /// What this card is worth for totals and rankings: the market price when
+    /// there is one, otherwise the lowest active listing. Market is derived from
+    /// recent *sales*, so a card that rarely trades — often the chases — has no
+    /// market but real listings; keying off market alone valued those at $0 and
+    /// dropped them from Luckiest Pulls. Computed, not stored, so no migration.
+    var priceValue: Double? {
+        if let market = priceMarket, market > 0 { return market }
+        if let low = priceLow, low > 0 { return low }
+        return nil
+    }
+
     /// Whether this is a monster card (vs. Spell or Trap). Drives whether to
     /// render attribute / level / ATK / DEF in the inspect view.
     var isMonster: Bool {

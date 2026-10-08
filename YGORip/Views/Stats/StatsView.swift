@@ -55,7 +55,9 @@ struct StatsView: View {
         var pulls: [(CardModel, Double)] = []
         var totalValue = 0.0
         for (cardID, count) in pullCount {
-            guard let card = cardsByID[cardID], let price = card.priceMarket, price > 0 else { continue }
+            // `priceValue`, not `priceMarket` — a rarely-traded card has no market
+            // price but real listings, and shouldn't count as $0.
+            guard let card = cardsByID[cardID], let price = card.priceValue else { continue }
             pulls.append((card, price))
             totalValue += price * Double(count)
         }
