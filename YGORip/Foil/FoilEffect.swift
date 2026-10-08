@@ -41,9 +41,13 @@ struct FoilShaderModifier: ViewModifier {
     /// layers are zero and `fs_colorDodge(base, 0)` is `base / 1.0`.
     private func shader() -> Shader {
         let p = Self.params(for: treatment)
+        // Zeroed params make tilt irrelevant for `.none`, and reading
+        // `motion.tilt` would subscribe every unfoiled card to the 60 Hz
+        // motion updates for nothing.
+        let tilt = treatment == .none ? .zero : motion.tilt
         return ShaderLibrary.cardShimmer(
             .float2(Float(size.width), Float(size.height)),
-            .float2(Float(motion.tilt.width), Float(motion.tilt.height)),
+            .float2(Float(tilt.width), Float(tilt.height)),
             .float(p.sheen * intensity),
             .float(p.rainbow * intensity),
             .float(p.sparkle * intensity)
