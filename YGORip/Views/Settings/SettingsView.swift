@@ -173,6 +173,14 @@ struct SettingsView: View {
 
     // MARK: - Preferences
 
+    private func volumeSlider(_ title: String, value: Binding<Float>) -> some View {
+        VStack(alignment: .leading, spacing: Theme.spacingXS) {
+            Label(title, systemImage: value.wrappedValue > 0 ? "speaker.wave.2.fill" : "speaker.slash.fill")
+            Slider(value: value, in: 0...1)
+                .tint(Theme.accent)
+        }
+    }
+
     @ViewBuilder
     private var preferencesSection: some View {
         Section {
@@ -193,18 +201,15 @@ struct SettingsView: View {
             } label: {
                 Label("Card Motion", systemImage: "gyroscope")
             }
-            // Last in the section so the footer below — which is entirely
-            // about it — reads as its caption, not a note on Card Motion.
-            VStack(alignment: .leading, spacing: Theme.spacingXS) {
-                Label("Sound Effects", systemImage: state.soundEffectsVolume > 0 ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                Slider(value: $state.soundEffectsVolume, in: 0...1)
-                    .tint(Theme.accent)
-            }
+            // Audio sliders last in the section so the footer below — which is
+            // entirely about them — reads as their caption, not a note on Card Motion.
+            volumeSlider("Sound Effects", value: $state.soundEffectsVolume)
+            volumeSlider("Background Music", value: $state.backgroundMusicVolume)
         } header: {
             Text("Preferences")
                 .foregroundStyle(Theme.secondaryText)
         } footer: {
-            Text("Drag to 0 to mute. Sounds follow your Silent switch.")
+            Text("Drag to 0 to mute. Music won't play over podcasts or other audio you're already listening to.")
                 .foregroundStyle(Theme.tertiaryText)
         }
         .listRowBackground(Theme.cardSurface)

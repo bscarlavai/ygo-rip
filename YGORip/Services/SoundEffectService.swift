@@ -24,21 +24,20 @@ final class SoundEffectService {
     }
 
     private var players: [Effect: AVAudioPlayer] = [:]
-    private var sessionConfigured = false
     weak var appState: AppState?
 
     private init() {}
 
     /// Play the given effect at the user's chosen volume. Volume of 0
     /// short-circuits before touching AVAudioSession or AVAudioPlayer —
-    /// "off" by way of "play at zero" matches the BackgroundMusicService
+    /// "off" by way of "play at zero" matches BackgroundMusicService's
     /// pattern and keeps the slider's "0 = off" UX honest.
     /// Cheap to call repeatedly — pre-loads on first play, rewinds on
     /// subsequent calls.
     func play(_ effect: Effect) {
         let volume = appState?.soundEffectsVolume ?? 1.0
         guard volume > 0 else { return }
-        configureSession()
+        AudioSession.activate()
 
         let player: AVAudioPlayer
         if let cached = players[effect] {
@@ -63,16 +62,5 @@ final class SoundEffectService {
         player.volume = (volume * volume) * 0.25
         player.currentTime = 0
         player.play()
-    }
-
-    /// Configure the shared audio session for `.ambient` playback. Safe
-    /// to call repeatedly — short-circuits after the first call. If a
-    /// `BackgroundMusicService` (or anything else) has already set the
-    /// session category, this is a no-op since both want `.ambient`.
-    private func configureSession() {
-        guard !sessionConfigured else { return }
-        try? AVAudioSession.sharedInstance().setCategory(.ambient)
-        try? AVAudioSession.sharedInstance().setActive(true)
-        sessionConfigured = true
     }
 }

@@ -39,6 +39,7 @@ struct YGORipApp: App {
                         showOnboarding = true
                     }
                     appState.startRegenClock()
+                    BackgroundMusicService.shared.setVolume(appState.backgroundMusicVolume)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                     appState.regenPacks()
@@ -46,9 +47,11 @@ struct YGORipApp: App {
                     // suspension, and regenPacks() already applied what was
                     // earned while away — this re-arms it for the next pack.
                     appState.startRegenClock()
+                    BackgroundMusicService.shared.resumeIfNeeded()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
                     appState.stopRegenClock()
+                    BackgroundMusicService.shared.pause()
                 }
         }
         .modelContainer(for: [

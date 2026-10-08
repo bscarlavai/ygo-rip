@@ -59,6 +59,15 @@ final class AppState {
         didSet { UserDefaults.standard.set(soundEffectsVolume, forKey: "soundEffectsVolume") }
     }
 
+    /// Background loop volume, separate from `soundEffectsVolume` so either
+    /// can be muted alone. 0 pauses playback rather than just muting it.
+    var backgroundMusicVolume: Float {
+        didSet {
+            UserDefaults.standard.set(backgroundMusicVolume, forKey: "backgroundMusicVolume")
+            BackgroundMusicService.shared.setVolume(backgroundMusicVolume)
+        }
+    }
+
     // MARK: - Pack Regen System
 
     static let maxPacks = 5
@@ -129,6 +138,7 @@ final class AppState {
         // never heard anything). Only applies to users who never set the
         // slider; anyone who did keeps their stored value.
         self.soundEffectsVolume = UserDefaults.standard.object(forKey: "soundEffectsVolume") as? Float ?? 0.25
+        self.backgroundMusicVolume = UserDefaults.standard.object(forKey: "backgroundMusicVolume") as? Float ?? 0.25
         self.hasOpenedFirstPack = UserDefaults.standard.bool(forKey: "hasOpenedFirstPack")
         self.crossPromoSeenApps = Set(UserDefaults.standard.stringArray(forKey: "crossPromoSeenApps") ?? [])
 
