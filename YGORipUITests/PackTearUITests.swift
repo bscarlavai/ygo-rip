@@ -73,7 +73,7 @@ final class PackTearUITests: XCTestCase {
 
     /// Captures the Settings sections this release changed: rip style, favor level, audio sliders.
     func testCaptureSettings() {
-        let app = XCUIApplication()
+        let app = makeApp()
         app.launch()
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(app.staticTexts["Rip Style"].waitForExistence(timeout: 10) || scrollTo(app.staticTexts["Rip Style"], in: app),
@@ -87,7 +87,7 @@ final class PackTearUITests: XCTestCase {
 
     /// Captures the Collection controls (view/sort row, filter row with the new set filter).
     func testCaptureCollection() {
-        let app = XCUIApplication()
+        let app = makeApp()
         app.launch()
         app.tabBars.buttons["Collection"].tap()
         _ = app.staticTexts.firstMatch.waitForExistence(timeout: 10)
@@ -96,9 +96,21 @@ final class PackTearUITests: XCTestCase {
 
     // MARK: - Helpers
 
+    /// The app with its first-run sheets pre-dismissed. On a fresh simulator the onboarding and
+    /// cross-promo sheets cover the set tiles, and every pack test fails on navigation.
+    private func makeApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments += [
+            "-hasCompletedOnboarding", "YES",
+            // Every key in SiblingApp.crossPromoTargets.
+            "-crossPromoSeenApps", "(pokerip, mtgrip, onerip)",
+        ]
+        return app
+    }
+
     /// Home → a set → a sealed pack. Tolerant about the route; fails loudly with what's on screen.
     private func launchAtSealedPack(ripMode: String) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = makeApp()
         app.launchArguments += ["-ripMode", ripMode]
         app.launch()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20), "the app never came to the foreground")
