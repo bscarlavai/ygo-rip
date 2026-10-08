@@ -98,8 +98,11 @@ final class BackgroundMusicService {
                 // `start()` so the other-audio check still applies (the user may
                 // have started a podcast during the interruption), and skipped
                 // while backgrounded — `resumeIfNeeded` covers the foreground.
+                // Not `== .active`: Siri or a dismissed call banner can end the
+                // interruption while `.inactive`, and with no trip through the
+                // background, `willEnterForeground` never fires to resume it.
                 guard currentVolume > 0,
-                      UIApplication.shared.applicationState == .active else { return }
+                      UIApplication.shared.applicationState != .background else { return }
                 AudioSession.reactivateAfterInterruption()
                 start()
             @unknown default:
