@@ -148,7 +148,9 @@ struct SetDetailView: View {
         // early here — as the old guard did — kept a corrected rarity or name
         // from ever reaching a set the user had opened. persistCards is one
         // query per set and writes only differing fields, so re-running is cheap.
-        let alreadyCached = !((try? modelContext.fetch(descriptor)) ?? []).isEmpty
+        // A count, not a fetch — fetching would load every card row just to
+        // test for emptiness.
+        let alreadyCached = ((try? modelContext.fetchCount(descriptor)) ?? 0) > 0
 
         // The spinner is only for a genuinely empty set; refreshing cards
         // already on screen must not blank them out.
