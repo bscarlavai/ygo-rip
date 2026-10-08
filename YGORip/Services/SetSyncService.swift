@@ -159,13 +159,27 @@ actor SetSyncService {
             for p in stalePulls { context.delete(p) }
         }
 
+        // One query per set (existingInSet), not one per card, so re-syncing a
+        // cached set on every SetDetail open stays cheap.
+        let existingByID = Dictionary(
+            existingInSet.filter { bundledAPIIDs.contains($0.apiID) }.map { ($0.apiID, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
         for printing in printings {
             let apiID = "\(setID):\(printing.id)"
-            let descriptor = FetchDescriptor<CardModel>(
-                predicate: #Predicate { $0.apiID == apiID }
-            )
-            let existing = try context.fetch(descriptor)
-            guard existing.isEmpty else { continue }
+
+            // A cached row still gets its bundle-owned fields refreshed. This
+            // used to `continue`, so a bundle correction (rarity, name, stats)
+            // only ever reached fresh installs or sets never opened — and a
+            // stale rarity also flattens the foil tier, reveal and sort.
+            // Favorites, wishlist and prices belong to the user and PriceRefresh;
+            // they're left alone. Only differing fields are written, so an
+            // unchanged set causes no @Query churn.
+            if let model = existingByID[apiID] {
+                Self.applyBundleFields(printing, defs[printing.id], to: model)
+                continue
+            }
 
             guard let def = defs[printing.id] else {
                 // Printing references a card not in the definitions dump — skip rather
@@ -206,7 +220,31 @@ actor SetSyncService {
             if wishlistIDs.contains(model.apiID) { model.isWishlisted = true }
             context.insert(model)
         }
-        try context.save()
+        // Runs on every SetDetail open now; an unchanged set writes nothing.
+        if context.hasChanges { try context.save() }
+    }
+
+    private static func applyBundleFields(_ printing: BundledPrinting, _ def: BundledCardDef?, to model: CardModel) {
+        func update<T: Equatable>(_ field: ReferenceWritableKeyPath<CardModel, T>, _ value: T) {
+            if model[keyPath: field] != value { model[keyPath: field] = value }
+        }
+        update(\.number, printing.code)
+        update(\.rarity, printing.rarity)
+        guard let def else { return }
+        update(\.ygoID, def.id)
+        update(\.name, def.name)
+        update(\.cardType, def.type)
+        update(\.frameType, def.frameType)
+        update(\.desc, def.desc)
+        update(\.attribute, def.attribute)
+        update(\.race, def.race)
+        update(\.level, def.level)
+        update(\.atk, def.atk)
+        update(\.def, def.def)
+        update(\.archetype, def.archetype)
+        update(\.scale, def.scale)
+        update(\.linkval, def.linkval)
+        update(\.linkmarkersRaw, def.linkmarkers?.joined(separator: ","))
     }
 
     // MARK: - Bundle loading

@@ -48,8 +48,9 @@ enum CollectionRestore {
         collectionStats: CollectionStats
     ) async {
         // 1. Re-seed every owned set's cards from the bundle (instant per set).
-        //    syncCards skips sets already cached, so this is cheap. Favorites/
-        //    wishlist are re-applied here too (SetSyncService consults the backup).
+        //    syncCards re-syncs cached sets too (one query per set, writing only
+        //    changed fields). Favorites/wishlist are re-applied here as well
+        //    (SetSyncService consults the backup).
         let container = modelContext.container
         for setID in ownedSetIDs {
             try? await SetSyncService.shared.syncCards(forSetID: setID, container: container)

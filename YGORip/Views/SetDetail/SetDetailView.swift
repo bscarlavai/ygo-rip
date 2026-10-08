@@ -142,12 +142,17 @@ struct SetDetailView: View {
             predicate: #Predicate { $0.setID == setID }
         )
 
-        // Skip if already cached
-        if let cached = try? modelContext.fetch(descriptor), !cached.isEmpty {
-            return
-        }
+        // Deliberately NOT skipped when the set is already cached. A bundle
+        // correction lives in `SetSyncService.persistCards` (decision #7 cleanup
+        // plus refreshing bundle-owned fields on existing rows), so returning
+        // early here — as the old guard did — kept a corrected rarity or name
+        // from ever reaching a set the user had opened. persistCards is one
+        // query per set and writes only differing fields, so re-running is cheap.
+        let alreadyCached = !((try? modelContext.fetch(descriptor)) ?? []).isEmpty
 
-        isSyncing = true
+        // The spinner is only for a genuinely empty set; refreshing cards
+        // already on screen must not blank them out.
+        isSyncing = !alreadyCached
         loadError = nil
 
         do {
