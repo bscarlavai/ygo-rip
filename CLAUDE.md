@@ -6,7 +6,7 @@
 - **Language:** Swift 6.0, SwiftUI
 - **Min deployment:** iOS 18.0
 - **Pattern:** MV (Model-View) — no per-view ViewModels
-- **Dependencies:** RevenueCat (subscriptions/IAP)
+- **Dependencies:** RevenueCat (subscriptions/IAP), PackTear (private, SSH `git@github.com:bscarlavai/pack-tear.git`, pinned `exactVersion` — drag-to-tear)
 - **Bundle ID:** com.lavailabs.ygorip
 - **Sister projects:** `../poke-rip` and `../mtg-rip` — same harness, different TCG flavor.
   The animation system, image cache, StoreKit, AppState shape, foil shader, and design
@@ -228,6 +228,10 @@ YGORip/
     ImageCacheService.swift   URLCache + FileManager image pipeline
     StoreKitService.swift     RevenueCat-backed IAP
     GyroService.swift         CoreMotion → SwiftUI for gyro-reactive foil
+    SoundEffectService.swift  Card swipe / tear sounds (Settings slider, default 0.25)
+    BackgroundMusicService.swift  Loops cardboard-cosmos.mp3 (shared with poke-rip/one-rip)
+    AudioSession.swift        Single owner of the .ambient AVAudioSession — both audio
+                              services go through it (configuring it twice killed the music in poke-rip)
     NetworkMonitor.swift      Connectivity status
   Views/
     Home/                     Set browser, era shelves (LOB era, Classic, Modern, Premium)
@@ -333,6 +337,31 @@ are per-printing, not per-card-ID.
 Four-phase pack opening — see poke-rip's CLAUDE.md for the full breakdown. Architecture
 is identical; only the rarity-tier mapping differs (Starlight Rare and Quarter Century
 Secret Rare get the screen-darken + particle treatment that Pokemon's Hyper Rare did).
+
+### Rip styles (Classic / Dynamic)
+`RipMode` (Settings → Gameplay → Rip Style):
+- **Classic** — the original swipe-to-split; direction and distance are all that count.
+- **Dynamic** — PackTear's drag-to-tear (ported from poke-rip via one-rip, PackTear 1.1.1).
+
+**Default differs from poke-rip on purpose (same as one-rip):** new installs get
+Dynamic; anyone who had opened a pack before 1.0.8 stays on Classic
+(`AppState.resolveRipMode`, keyed on `hasOpenedFirstPack`, written back on first
+resolve so a new player's first pack doesn't flip them to Classic). Existing players
+get no in-app pointer; new players on Dynamic see "Prefer a simpler rip? Switch to
+Classic" once on pack two, and "Trouble opening?" after three failed tears.
+
+### Favor Unpulled Cards (Off / Normal / Strong)
+`UnownedBias` in `PackPrefetcher.swift`, bridged over `unownedCardBiasEnabled` +
+`unownedCardBiasStrong` so every install keeps its existing setting. Off/Normal are
+byte-identical to the old toggle. YGORip has only the per-card lean toward unowned
+cards — poke-rip's rare-slot redistribution was never ported, so don't copy its
+footer copy.
+
+### UI tests
+`YGORipUITests` drives real touches through both rip styles (style forced with a
+`-ripMode` launch argument) and captures Settings/Collection screenshots
+(`xcrun xcresulttool export attachments`). Needs free packs on the simulator — out
+of packs, the pack tests **skip** and xcodebuild still prints TEST SUCCEEDED.
 
 ## Foil System
 
