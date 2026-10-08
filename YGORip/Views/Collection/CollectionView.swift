@@ -608,5 +608,8 @@ private extension View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(Theme.cardSurface, in: Capsule())
+            // The pill stays compact; the tap target grows to 44pt around it.
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
     }
 }

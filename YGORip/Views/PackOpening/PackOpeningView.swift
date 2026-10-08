@@ -661,6 +661,8 @@ struct PackOpeningView: View {
                 .padding(.horizontal, Theme.spacingMD)
                 .padding(.vertical, Theme.spacingSM)
                 .background(Theme.cardSurface.opacity(0.7), in: Capsule())
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
