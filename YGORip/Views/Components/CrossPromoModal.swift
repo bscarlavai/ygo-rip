@@ -42,6 +42,16 @@ extension SiblingApp {
         appStoreID: "6770387435"
     )
 
+    static let oneRip = SiblingApp(
+        key: "onerip",
+        name: "OneRip",
+        tagline: "Rip packs, chase Leaders.",
+        blurb: "From the makers of YuRip. Open booster packs from every set, chase Leaders, Super Rares, and Secret Rares, and build your dream collection.",
+        iconAsset: "OneRipIcon",
+        fallbackSymbol: "sailboat.fill",
+        appStoreID: "6792312745"
+    )
+
     /// Sibling apps this app promotes, in priority order. On each Home
     /// appearance after the user has opened their first pack, every
     /// entry not yet in `AppState.crossPromoSeenApps` is shown together
@@ -49,7 +59,7 @@ extension SiblingApp {
     /// it to surface in the next modal for every existing install (the
     /// new key isn't in their seen-set yet) without re-showing siblings
     /// they've already dismissed.
-    static let crossPromoTargets: [SiblingApp] = [.pokeRip, .mtgRip]
+    static let crossPromoTargets: [SiblingApp] = [.pokeRip, .mtgRip, .oneRip]
 }
 
 /// "More from Lavai Labs" sheet — surfaces every sibling app the user
