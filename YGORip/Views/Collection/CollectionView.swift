@@ -6,9 +6,19 @@ struct CollectionView: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @Environment(CollectionStats.self) private var collectionStats
     @Query private var allCards: [CardModel]
+    /// Set metadata for the Set filter's menu labels and newest-first order.
+    /// A few dozen rows, loaded once at launch.
+    @Query private var allSets: [SetModel]
 
-    @State private var viewMode: ViewMode = .grid
-    @State private var sortOption: SortOption = .recent
+    // Persisted, not @State: these reset on every tab switch otherwise, so a
+    // user who prefers Binder + Set # had to re-pick both every single visit.
+    @AppStorage("collection.viewMode") private var viewMode: ViewMode = .grid
+    @AppStorage("collection.sortOption") private var sortOption: SortOption = .recent
+    // Set filter; "" means All Sets. Deliberately not persisted (view mode and
+    // sort are): a filter that survives relaunch reads as "my cards are
+    // missing". Read it through `activeSet`, which falls back to All when the
+    // chosen set is gone or no longer owned.
+    @State private var filterSetID = ""
     @State private var filterRarity: String?
     @State private var filterFavorites = false
     @State private var searchText = ""
@@ -18,6 +28,8 @@ struct CollectionView: View {
     @State private var binderPages: [[OwnedCard]] = []
     @State private var binderPage: Int? = 0
     @State private var lastPullCount = 0
+    @State private var rarities: [String] = []
+    @State private var ownedSets: [SetModel] = []
 
     enum ViewMode: String, CaseIterable {
         case grid = "Grid"
@@ -32,13 +44,35 @@ struct CollectionView: View {
         case setNumber = "Set #"
     }
 
-    private var rarities: [String] {
-        let all = Set(cachedOwnedCards.map(\.model.rarity))
-        return Array(all).sorted {
+    /// Options for the rarity and set filter menus.
+    ///
+    /// Cached rather than computed in `body`: both are full passes over the
+    /// owned-cards array, and `body` re-evaluates on every search keystroke.
+    /// They only change when the collection or the set list does, which is
+    /// exactly when this runs.
+    private func rebuildFilterOptions() {
+        let rarityValues = Set(cachedOwnedCards.map(\.model.rarity))
+        rarities = rarityValues.sorted {
             let r1 = CardModel.rarityRank(for: $0)
             let r2 = CardModel.rarityRank(for: $1)
             return r1 != r2 ? r1 < r2 : $0 < $1
         }
+
+        // Only sets the user owns cards from, newest first — the full catalog
+        // would mostly filter the collection down to nothing.
+        let ownedIDs = Set(cachedOwnedCards.map(\.model.setID))
+        ownedSets = allSets
+            .filter { ownedIDs.contains($0.apiID) }
+            .sorted { $0.releaseDate > $1.releaseDate }
+    }
+
+    /// The set filter actually in effect. A stored set that no longer exists
+    /// or that the user owns nothing from reads as All Sets. The stored value
+    /// is left alone rather than cleared, so a pick isn't wiped while owned
+    /// cards are still loading.
+    private var activeSet: SetModel? {
+        guard !filterSetID.isEmpty else { return nil }
+        return ownedSets.first { $0.apiID == filterSetID }
     }
 
     /// Build owned cards list from `CollectionStats` aggregates + card lookup.
@@ -62,6 +96,7 @@ struct CollectionView: View {
 
         cachedOwnedCards = cards
         lastPullCount = collectionStats.totalPulls
+        rebuildFilterOptions()
         refreshDisplay()
     }
 
@@ -93,8 +128,14 @@ struct CollectionView: View {
             // changes too — otherwise the grid stays empty until an app
             // restart even though the data is present.
             .onChange(of: allCards.count) { _, _ in rebuildOwnedCards() }
+            // Set metadata arriving late changes which sets the filter can offer.
+            .onChange(of: allSets.count) { _, _ in
+                rebuildFilterOptions()
+                refreshDisplay()
+            }
             .onChange(of: sortOption) { _, _ in refreshDisplay() }
             .onChange(of: filterRarity) { _, _ in refreshDisplay() }
+            .onChange(of: filterSetID) { _, _ in refreshDisplay() }
             .onChange(of: filterFavorites) { _, _ in refreshDisplay() }
             .onChange(of: searchText) { _, _ in refreshDisplay() }
         }
@@ -126,8 +167,9 @@ struct CollectionView: View {
             .padding(Theme.spacingSM)
             .background(Theme.cardSurface, in: .rect(cornerRadius: Theme.radiusSM))
 
+            // View mode + sort on one row, filters on the next. A fifth control
+            // in a single row truncated every capsule on non-Max phones.
             HStack {
-                // View mode toggle
                 Picker("View", selection: $viewMode) {
                     ForEach(ViewMode.allCases, id: \.self) { mode in
                         Text(mode.rawValue).tag(mode)
@@ -159,25 +201,18 @@ struct CollectionView: View {
                         Text(sortOption.rawValue)
                             .lineLimit(1)
                     }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Theme.primaryText)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Theme.cardSurface, in: Capsule())
+                    .filterCapsule()
                 }
+            }
 
+            HStack {
                 // Favorites filter
                 Button {
                     filterFavorites.toggle()
                 } label: {
                     Image(systemName: filterFavorites ? "heart.fill" : "heart")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(filterFavorites ? .red : Theme.primaryText)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Theme.cardSurface, in: Capsule())
+                        .filterCapsule(tint: filterFavorites ? .red : Theme.primaryText)
                 }
-
 
                 // Rarity filter
                 Menu {
@@ -192,12 +227,27 @@ struct CollectionView: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(filterRarity != nil ? Theme.accent : Theme.primaryText)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Theme.cardSurface, in: Capsule())
+                    .filterCapsule(tint: filterRarity != nil ? Theme.accent : Theme.primaryText)
                 }
+
+                // Set filter — search only matches card names, so this is the
+                // only way to narrow the collection to one set.
+                Menu {
+                    Button("All Sets") { filterSetID = "" }
+                    ForEach(ownedSets, id: \.apiID) { set in
+                        Button(set.name) { filterSetID = set.apiID }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "rectangle.stack")
+                        Text(activeSet?.name ?? "Set")
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .filterCapsule(tint: activeSet != nil ? Theme.accent : Theme.primaryText)
+                }
+
+                Spacer()
             }
 
             // Stats bar
@@ -513,6 +563,11 @@ struct CollectionView: View {
             result = result.filter { $0.model.rarity == rarity }
         }
 
+        // Set filter
+        if let setID = activeSet?.apiID {
+            result = result.filter { $0.model.setID == setID }
+        }
+
         // Sort
         switch sortOption {
         case .recent:
@@ -538,4 +593,20 @@ struct OwnedCard: Identifiable {
     let lastPulled: Date
 
     var id: String { model.apiID }
+}
+
+// MARK: - Filter capsule
+
+private extension View {
+    /// Shared pill styling for the collection's sort and filter controls.
+    /// `tint` carries the active state — accent for filters, red for
+    /// favorites — so callers express "on" with a color, not a style block.
+    func filterCapsule(tint: Color = Theme.primaryText) -> some View {
+        self
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Theme.cardSurface, in: Capsule())
+    }
 }
