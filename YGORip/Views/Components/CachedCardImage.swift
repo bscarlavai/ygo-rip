@@ -49,6 +49,16 @@ struct CachedCardImage: View {
         .task(id: urlString) {
             await loadImage()
         }
+        // A failed tile retries on its own when the reason it failed may have
+        // gone away — the network came back, or the user returned to the app —
+        // instead of waiting for a tap on every tile in a grid. (Scrolling a
+        // tile off and back on already retries: `.task` re-fires on appear.)
+        .onChange(of: NetworkMonitor.shared.isConnected) { _, connected in
+            if connected { retryIfFailed() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            retryIfFailed()
+        }
         .onAppear {
             withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
                 shimmerPhase = 1
@@ -71,13 +81,19 @@ struct CachedCardImage: View {
                 VStack(spacing: Theme.spacingSM) {
                     Image(systemName: "photo")
                         .foregroundStyle(Theme.tertiaryText)
-                    Button("Retry") {
-                        hasFailed = false
-                        Task { await loadImage() }
-                    }
+                    Button("Retry") { retry() }
                     .font(.caption)
                 }
             }
+    }
+
+    private func retryIfFailed() {
+        if hasFailed { retry() }
+    }
+
+    private func retry() {
+        hasFailed = false
+        Task { await loadImage() }
     }
 
     private func loadImage() async {

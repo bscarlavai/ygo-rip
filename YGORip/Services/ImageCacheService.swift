@@ -16,6 +16,10 @@ actor ImageCacheService {
         try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
 
         let config = URLSessionConfiguration.default
+        // The 60s default left a slow tile on its skeleton for up to two minutes
+        // (two attempts) before it could even show Retry. Fail fast; the view
+        // retries on its own when the network or the app comes back.
+        config.timeoutIntervalForRequest = 15
         config.urlCache = URLCache(
             memoryCapacity: 50 * 1024 * 1024,
             diskCapacity: 200 * 1024 * 1024
