@@ -21,6 +21,7 @@ final class SetCompletionTests: XCTestCase {
         ("MRL", "lob", "Super Short Print"),
         ("PTDN", "gx", "Short Print"),          // classic era
         ("CORE", "arcv", "Ultimate Rare"),      // modern era (also has Short Prints)
+        ("BETB", "gorush", "Secret Rare"),      // newest booster — proves a fresh bundle set rips and completes
     ]
 
     func testAffectedSetsCanReachFullCompletion() throws {
