@@ -350,7 +350,12 @@ struct PackOpeningView: View {
             // Decided once, here, so marking it seen later can't retract it
             // mid-pack. See `shouldHintRipStyle`.
             hintRipStyleThisPack = shouldHintRipStyle
-            renderWrapperIfNeeded()
+            // Two full-size ImageRenderer passes on the main thread — only the
+            // dynamic tear shows either image, so Classic skips them.
+            if appState.ripMode == .dynamic { renderWrapperIfNeeded() }
+        }
+        .onChange(of: appState.ripMode) { _, mode in
+            if mode == .dynamic { renderWrapperIfNeeded() }
         }
         .task { await generateAndPreload() }
     }
