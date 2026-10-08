@@ -289,6 +289,21 @@ renders boss-card art, and `Resources/Bundled` is a folder reference that ships
 wholesale in the app binary, so logo PNGs must never live there (the cache is
 `data-pipeline/raw/set-logos/`).
 
+Two guards in the build:
+- **Drops are pinned, not silent.** A set or printing that a previous bundle shipped
+  but YGOPRODeck no longer lists (re-coded, merged, removed) would make
+  `SetSyncService` delete users' pulled cards. The build report prints a
+  `⚠ DROPPED vs previous bundle` section; add each one to `data-pipeline/pinned.json`
+  (copied from the previous bundle) unless the drop is genuinely wanted. Current pins:
+  DPC5 (re-coded to DPCT upstream) and TF05-EN003.
+- **Unreleased sets are held.** Sets dated more than `HOLD_UNRELEASED_DAYS` (14) out
+  are skipped and listed under `Held`. YGOPRODeck lists a set from its first reveals,
+  so building early ships a partial set (MAMO shipped at 18 of 126 cards).
+
+New `set-cards-*.json` files need `xcodegen generate`: the loader reads them flattened
+at the bundle root, via the main `YGORip` source glob, so each file is its own project
+entry. Without a regen the new set is in `sets.json` but its cards fail to load.
+
 After a refresh: run `python3 scripts/audit-rarity-coverage.py` (must exit 0),
 check for new/removed rarity strings vs the prior bundle, and map any new sets
 in `~/code/tcg-price-api` (see the tcg-price-coverage skill) or their cards

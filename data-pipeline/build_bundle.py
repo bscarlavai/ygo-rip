@@ -29,6 +29,7 @@ import json
 import re
 import sys
 import time
+from datetime import date, timedelta
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -728,6 +729,71 @@ def fetch_set_logo(set_code):
 # time this runs, so a failed validation lets you re-emit-and-fix without
 # refetching. Run standalone via `python3 build_bundle.py --validate-only`.
 
+# Sets releasing further out than this are held back. YGOPRODeck lists a
+# set as soon as its first cards are revealed, so building early ships a
+# partial set: MAMO went out in July 2026 at 18 of its 126 cards and sat
+# like that until the next bundle. A booster dated within the window (its
+# full list is out by street date) still ships, so release-week builds work.
+HOLD_UNRELEASED_DAYS = 14
+
+PINNED_PATH = ROOT / "pinned.json"
+
+
+def is_held_unreleased(tcg_date, today=None):
+    if not tcg_date:
+        return False
+    cutoff = ((today or date.today()) + timedelta(days=HOLD_UNRELEASED_DAYS)).isoformat()
+    return tcg_date > cutoff
+
+
+def apply_pins(set_records, printings_by_code):
+    """Re-add pinned sets/printings (see pinned.json) the fresh build lacks.
+
+    Mutates both arguments. Returns a list of human-readable report lines.
+    """
+    if not PINNED_PATH.exists():
+        return []
+    pinned = json.loads(PINNED_PATH.read_text())
+    report = []
+    shipped = {r["code"] for r in set_records}
+    for code, entry in pinned.get("sets", {}).items():
+        if code in shipped:
+            continue
+        set_records.append(dict(entry["record"], totalCards=len(entry["printings"])))
+        printings_by_code[code] = list(entry["printings"])
+        report.append(f"{code}: whole set ({len(entry['printings'])} printings)")
+    for code, entry in pinned.get("printings", {}).items():
+        current = printings_by_code.get(code)
+        if current is None:
+            report.append(f"{code}: SKIPPED — set not in this build; pin the whole set instead")
+            continue
+        have = {(p["id"], p["code"]) for p in current}
+        added = [p for p in entry["printings"] if (p["id"], p["code"]) not in have]
+        if added:
+            current.extend(added)
+            for r in set_records:
+                if r["code"] == code:
+                    r["totalCards"] = len(current)
+            report.append(f"{code}: {', '.join(p['code'] for p in added)}")
+    return report
+
+
+def dropped_since(previous_sets, previous_printings, set_records, printings_by_code):
+    """What a previous bundle shipped that this build no longer does."""
+    dropped = []
+    shipped = {r["code"] for r in set_records}
+    for code in sorted(previous_sets - shipped):
+        dropped.append(f"{code}: whole set")
+    for code, prev in sorted(previous_printings.items()):
+        if code not in shipped:
+            continue
+        now = {p["id"] for p in printings_by_code.get(code, [])}
+        gone = sorted(p["code"] for p in prev if p["id"] not in now)
+        if gone:
+            dropped.append(f"{code}: {', '.join(gone)}")
+    return dropped
+
+
 def validate_bundle():
     """Audit the on-disk bundle. Returns True on pass, False on hard fail."""
     print(f"\n=== Validating bundle ===", file=sys.stderr)
@@ -899,6 +965,17 @@ def main():
 
     print(f"Loaded {len(raw_sets)} sets, {len(raw_cards)} cards from YGOPRODeck", file=sys.stderr)
 
+    # Snapshot what the previous bundle shipped, before the wipe below, so
+    # the report can name anything this build drops. A dropped set or
+    # printing deletes users' pulled cards on sync (decision #7) — pin it in
+    # pinned.json unless the drop is genuinely wanted.
+    previous_sets = set()
+    previous_printings = {}
+    if (OUT / "sets.json").exists():
+        previous_sets = {r["code"] for r in json.loads((OUT / "sets.json").read_text())}
+        for f in OUT.glob("set-cards-*.json"):
+            previous_printings[f.stem[len("set-cards-"):]] = json.loads(f.read_text())
+
     # Wipe stale per-set printing files so dropped/collab/collision sets don't
     # leave orphaned data in the bundle. sets.json + cards.json are rewritten
     # in full each run, but set-cards-*.json files would otherwise accumulate.
@@ -950,6 +1027,8 @@ def main():
     set_records = []
     sets_no_printings = []
     collab_skipped = []
+    held_unreleased = []
+    printings_by_code = {}
     # Cards already chosen as featured by earlier (chronologically) sets.
     # The featured picker honors this except for sets whose names match
     # a theme allowlist (Blue-Eyes / Kaiba decks still get Blue-Eyes).
@@ -962,6 +1041,9 @@ def main():
             continue
         if is_collab_set(name):
             collab_skipped.append((code, name))
+            continue
+        if is_held_unreleased(tcg_date):
+            held_unreleased.append((code, name, tcg_date))
             continue
         printings = printings_by_name.get(name, [])
         if not printings:
@@ -998,9 +1080,14 @@ def main():
             "featuredCardID": chosen_featured,
         }
         set_records.append(record)
+        printings_by_code[code] = list(printings)
 
-        # Emit per-set printing file
-        if not args.sets_only:
+    pinned_report = apply_pins(set_records, printings_by_code)
+    dropped = dropped_since(previous_sets, previous_printings, set_records, printings_by_code)
+
+    # Emit per-set printing files
+    if not args.sets_only:
+        for code, printings in printings_by_code.items():
             (OUT / f"set-cards-{code}.json").write_text(
                 json.dumps(printings, separators=(",", ":"))
             )
@@ -1083,6 +1170,22 @@ def main():
         print(f"\n  Collab/crossover sets blocked:", file=sys.stderr)
         for code, name in collab_skipped:
             print(f"    {code}: {name}", file=sys.stderr)
+
+    if held_unreleased:
+        print(f"\n  Held — releases more than {HOLD_UNRELEASED_DAYS} days out:", file=sys.stderr)
+        for code, name, tcg_date in held_unreleased:
+            print(f"    {code}: {name} ({tcg_date})", file=sys.stderr)
+
+    if pinned_report:
+        print(f"\n  Pinned (re-added from pinned.json):", file=sys.stderr)
+        for line in pinned_report:
+            print(f"    {line}", file=sys.stderr)
+
+    if dropped:
+        print(f"\n  ⚠ DROPPED vs previous bundle — users lose pulled cards for these on sync."
+              f"\n    Pin them in pinned.json unless the drop is intended:", file=sys.stderr)
+        for line in dropped:
+            print(f"    {line}", file=sys.stderr)
 
     # Final audit — non-zero exit if anything orphan-shaped slipped through.
     if not validate_bundle():

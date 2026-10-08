@@ -1,0 +1,56 @@
+{
+ "_comment": "Sets and printings that shipped in an earlier bundle and must keep shipping after YGOPRODeck drops or re-codes them. Dropping one makes SetSyncService's stale-row cleanup delete users' pulled cards (CLAUDE.md decision #7). build_bundle.py re-adds anything here that the fresh build lacks; entries the fresh build already has are left alone.",
+ "sets": {
+  "DPC5": {
+   "_why": "2026-10: YGOPRODeck re-coded Duelist Pack Collection Tin 2011 to DPCT, where the larger 2010 tin wins the set_code dedup.",
+   "record": {
+    "code": "DPC5",
+    "name": "Duelist Pack Collection Tin 2011",
+    "tcgDate": "2011-03-31",
+    "totalCards": 4,
+    "era": "5ds",
+    "shelf": "premium",
+    "featuredCardID": 94515289
+   },
+   "printings": [
+    {
+     "id": 94515289,
+     "rarity": "Secret Rare",
+     "code": "DPCT-EN005",
+     "price": "1.89"
+    },
+    {
+     "id": 95453143,
+     "rarity": "Super Rare",
+     "code": "DPC5-EN003",
+     "price": "2.71"
+    },
+    {
+     "id": 63465535,
+     "rarity": "Super Rare",
+     "code": "DPC5-EN001",
+     "price": "1.81"
+    },
+    {
+     "id": 22858242,
+     "rarity": "Super Rare",
+     "code": "DPC5-EN002",
+     "price": "1.38"
+    }
+   ]
+  }
+ },
+ "printings": {
+  "TF05": {
+   "_why": "2026-10: YGOPRODeck no longer lists TF05-EN003.",
+   "printings": [
+    {
+     "id": 72022087,
+     "rarity": "Super Rare",
+     "code": "TF05-EN003",
+     "price": "0.08"
+    }
+   ]
+  }
+ }
+}
