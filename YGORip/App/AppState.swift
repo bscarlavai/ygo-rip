@@ -1,7 +1,10 @@
 import SwiftUI
 import UserNotifications
 
+/// Main-actor isolated: every property here is read by SwiftUI views during
+/// layout, and `regenClock` hops back to the main actor to mutate pack state.
 @Observable
+@MainActor
 final class AppState {
     // MARK: - Premium Status
 
@@ -122,12 +125,10 @@ final class AppState {
         self.idleHoloShimmerEnabled = UserDefaults.standard.object(forKey: "idleHoloShimmerEnabled") as? Bool ?? true
         self.notificationsEnabled = UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool ?? true
         self.unownedCardBiasEnabled = UserDefaults.standard.object(forKey: "unownedCardBiasEnabled") as? Bool ?? true
-        // Default to silent for 1.0 — the SoundEffectService short-
-        // circuits at 0 so the swipe sound never plays unless the user
-        // explicitly raises the slider (currently DEBUG-only). When sound
-        // effects are ready to ship to all users, raise this default and
-        // unhide the slider in SettingsView.
-        self.soundEffectsVolume = UserDefaults.standard.object(forKey: "soundEffectsVolume") as? Float ?? 0
+        // Shipped in 1.0.3 (was 0 with a DEBUG-only slider, so release users
+        // never heard anything). Only applies to users who never set the
+        // slider; anyone who did keeps their stored value.
+        self.soundEffectsVolume = UserDefaults.standard.object(forKey: "soundEffectsVolume") as? Float ?? 0.25
         self.hasOpenedFirstPack = UserDefaults.standard.bool(forKey: "hasOpenedFirstPack")
         self.crossPromoSeenApps = Set(UserDefaults.standard.stringArray(forKey: "crossPromoSeenApps") ?? [])
 
@@ -176,6 +177,12 @@ final class AppState {
             if currentPacks == 0 {
                 schedulePackNotification()
             }
+
+            // Dropping below max starts the countdown, so the clock has to
+            // (re)start here as well as on foreground — otherwise the first
+            // pack spent in a session never regenerates until the app is
+            // backgrounded.
+            startRegenClock()
         }
         totalPacksOpened += 1
 
@@ -186,9 +193,53 @@ final class AppState {
         }
     }
 
-    /// Called on app foreground — calculate packs earned while away
+    // MARK: - Regen clock
+
+    /// Wakes when the next pack is due and grants it, while the app is open.
+    ///
+    /// Without this, `regenPacks()` ran only at launch and on
+    /// `willEnterForeground`, so someone watching the countdown tick to "0m"
+    /// was never granted the pack until they backgrounded the app. Sleeps
+    /// until the due moment rather than polling, so an idle app does no work.
+    @ObservationIgnored private var regenClock: Task<Void, Never>?
+
+    func startRegenClock() {
+        regenClock?.cancel()
+        regenClock = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self,
+                      !self.isUnlimitedRips,
+                      self.currentPacks < Self.maxPacks
+                else { return }
+
+                // Floor of 0.5s: an already-due pack reports 0 here, and
+                // sleeping zero would spin this loop.
+                let wait = max(0.5, self.timeUntilNextPack ?? 0)
+                try? await Task.sleep(for: .seconds(wait))
+                guard !Task.isCancelled else { return }
+                self.regenPacks()
+            }
+        }
+    }
+
+    func stopRegenClock() {
+        regenClock?.cancel()
+        regenClock = nil
+    }
+
+    /// Grant any packs earned since `lastRegenDate`. A no-op unless a full
+    /// interval has elapsed. Driven from launch (`init`), foreground, and
+    /// `regenClock` while the app is open.
     func regenPacks() {
         guard currentPacks < Self.maxPacks else { return }
+
+        // A future timestamp can never be reached, so `packsEarned` stays
+        // negative and packs stop regenerating permanently (only a reinstall
+        // escapes). Happens when the device clock jumps forward and is later
+        // corrected.
+        if lastRegenDate > .now {
+            lastRegenDate = .now
+        }
 
         let elapsed = Date.now.timeIntervalSince(lastRegenDate)
         let packsEarned = Int(elapsed / Self.regenIntervalSeconds)

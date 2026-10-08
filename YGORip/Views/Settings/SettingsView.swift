@@ -180,16 +180,6 @@ struct SettingsView: View {
             Toggle(isOn: $state.hapticsEnabled) {
                 Label("Haptic Feedback", systemImage: "hand.tap.fill")
             }
-            #if DEBUG
-            // Sound effects are wired up but not yet shipped to release
-            // builds — default volume is 0, slider hidden. When ready to
-            // launch, remove the #if and raise the default in AppState.
-            VStack(alignment: .leading, spacing: Theme.spacingXS) {
-                Label("Sound Effects", systemImage: state.soundEffectsVolume > 0 ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                Slider(value: $state.soundEffectsVolume, in: 0...1)
-                    .tint(Theme.accent)
-            }
-            #endif
             Toggle(isOn: $state.notificationsEnabled) {
                 Label("Pack Notifications", systemImage: "bell.fill")
             }
@@ -203,9 +193,19 @@ struct SettingsView: View {
             } label: {
                 Label("Card Motion", systemImage: "gyroscope")
             }
+            // Last in the section so the footer below — which is entirely
+            // about it — reads as its caption, not a note on Card Motion.
+            VStack(alignment: .leading, spacing: Theme.spacingXS) {
+                Label("Sound Effects", systemImage: state.soundEffectsVolume > 0 ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                Slider(value: $state.soundEffectsVolume, in: 0...1)
+                    .tint(Theme.accent)
+            }
         } header: {
             Text("Preferences")
                 .foregroundStyle(Theme.secondaryText)
+        } footer: {
+            Text("Drag to 0 to mute. Sounds follow your Silent switch.")
+                .foregroundStyle(Theme.tertiaryText)
         }
         .listRowBackground(Theme.cardSurface)
     }
