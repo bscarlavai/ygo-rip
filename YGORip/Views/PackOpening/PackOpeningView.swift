@@ -381,13 +381,7 @@ struct PackOpeningView: View {
                 seed: UInt64(bitPattern: Int64(ripSeed)),
                 style: tearStyle,
                 onTearBegan: {
-                    // Shown once means shown for one whole pack: marked when
-                    // the pack is actually opened, not when the hint renders.
-                    if hintRipStyleThisPack { appState.hasSeenRipStyleHint = true }
-                    // The frame the gesture commits: sound and haptic land together with the tear.
-                    PackTiming.mark("tear: rip gesture committed")
-                    hapticMedium += 1
-                    SoundEffectService.shared.play(.tear)
+                    commitRip("tear: rip gesture committed")
                     ripSplit = 1
                 },
                 // A snap per ~20pt of drag, so the tear is felt the whole way across rather than
@@ -527,13 +521,10 @@ struct PackOpeningView: View {
                         }
                         return
                     }
-                    if hintRipStyleThisPack { appState.hasSeenRipStyleHint = true }
-                    PackTiming.mark("swipe: rip gesture committed")
-                    hapticMedium += 1
                     // On the committing frame, not in ripPack() — that runs
                     // 400ms later, by which point the 350ms split has already
                     // finished and the sound lands after the animation.
-                    SoundEffectService.shared.play(.tear)
+                    commitRip("swipe: rip gesture committed")
                     withAnimation(.easeOut(duration: 0.35)) {
                         ripSplit = 1
                         dragOffset = 0
@@ -700,6 +691,17 @@ struct PackOpeningView: View {
             .font(.subheadline)
             .foregroundStyle(Theme.tertiaryText)
         }
+    }
+
+    /// The frame either rip style commits: sound and haptic land together with
+    /// the tear or split.
+    private func commitRip(_ timingLabel: String) {
+        // Shown once means shown for one whole pack: marked when the pack is
+        // actually opened, not when the hint renders.
+        if hintRipStyleThisPack { appState.hasSeenRipStyleHint = true }
+        PackTiming.mark(timingLabel)
+        hapticMedium += 1
+        SoundEffectService.shared.play(.tear)
     }
 
     /// Rasterises the wrapper once per pack.
