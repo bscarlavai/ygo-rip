@@ -505,9 +505,11 @@ struct PackOpeningView: View {
                     guard preloadedPack != nil, ripSplit == 0 else { return }
                     isDragging = true
                     dragOffset = value.translation.width * 0.5
-                    let screenHeight = UIScreen.main.bounds.height
-                    if screenHeight > 0 {
-                        ripFraction = min(max(value.startLocation.y / screenHeight, 0.15), 0.85)
+                    // `startLocation` is local to the pack, so it's a fraction
+                    // of the pack's height. Dividing by the screen's put the
+                    // split ~30% above the thumb.
+                    if packSize.height > 0 {
+                        ripFraction = (value.startLocation.y / packSize.height).clamped(to: 0.15...0.85)
                     }
                 }
                 .onEnded { value in
