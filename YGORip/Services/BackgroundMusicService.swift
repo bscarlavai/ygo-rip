@@ -1,4 +1,5 @@
 import AVFoundation
+import UIKit
 
 /// Loops a background track that respects whatever else is playing on the device.
 ///
@@ -93,10 +94,14 @@ final class BackgroundMusicService {
             case .ended:
                 // Deliberately ignoring `.shouldResume`: it's advisory, and
                 // an ambient background loop the user opted into is exactly
-                // the case where resuming is right regardless.
-                guard currentVolume > 0 else { return }
+                // the case where resuming is right regardless. Routed through
+                // `start()` so the other-audio check still applies (the user may
+                // have started a podcast during the interruption), and skipped
+                // while backgrounded — `resumeIfNeeded` covers the foreground.
+                guard currentVolume > 0,
+                      UIApplication.shared.applicationState == .active else { return }
                 AudioSession.reactivateAfterInterruption()
-                player?.play()
+                start()
             @unknown default:
                 break
             }
@@ -115,7 +120,9 @@ final class BackgroundMusicService {
                 player?.pause()
             case .end:
                 // Other audio stopped — resume if user still wants music.
-                if currentVolume > 0 { player?.play() }
+                // `start()`, not `player?.play()`: if the app launched while
+                // other audio was playing, no player was ever created.
+                if currentVolume > 0 { start() }
             @unknown default:
                 break
             }

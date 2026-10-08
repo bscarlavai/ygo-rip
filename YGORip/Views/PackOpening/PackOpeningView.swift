@@ -636,6 +636,9 @@ struct PackOpeningView: View {
             // Acting on it counts as having seen it, so the one-time pointer
             // doesn't reappear later if they switch back to dynamic.
             appState.hasSeenRipStyleHint = true
+            // The per-pack latch keeps the capsule up otherwise, offering a
+            // switch that already happened until the pack is torn.
+            hintRipStyleThisPack = false
             hapticLight += 1
         } label: {
             // Two audiences, two framings. Someone who has failed three tears
