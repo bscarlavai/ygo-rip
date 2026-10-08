@@ -1,6 +1,57 @@
 import Foundation
 import SwiftData
 
+/// How hard a pack leans toward cards the user hasn't pulled yet (Settings →
+/// Gameplay). Ported from poke-rip, where the old on/off read stronger than it
+/// was: "up to 4×" is only approached in the last sliver of a set — at 70%
+/// complete the real favour was 1.23×. `strong` mostly moves the ramp's
+/// **start** (0.60 → 0.35), which is what makes it felt mid-set (~1.8× at 70%).
+///
+/// `normal` is byte-identical to the old enabled behaviour and `off` to the old
+/// disabled one, so nobody's packs change under them. (poke-rip also leans the
+/// rare slot away from finished rarity tiers; YGORip's bias never had that
+/// half, so only the per-card weight is here.)
+enum UnownedBias: String, CaseIterable, Sendable {
+    case off
+    case normal
+    case strong
+
+    /// Set completion at which the bias starts to ramp in. Below this, picks
+    /// are uniform so early packs feel like authentic RNG.
+    var startCompletion: Double {
+        switch self {
+        case .off:    1.0    // never reached; `isEnabled` short-circuits first
+        case .normal: 0.60
+        case .strong: 0.35
+        }
+    }
+
+    /// Per-pick weight for an owned card at 100% completion — the floor of the
+    /// ramp. 0.25 means an unowned card is up to 4× as likely.
+    var ownedFloor: Double {
+        switch self {
+        case .off:    1.0
+        case .normal: 0.25
+        case .strong: 0.15
+        }
+    }
+
+    var isEnabled: Bool { self != .off }
+
+    /// Settings footer. States the threshold because the feature is invisible
+    /// until a set crosses it — someone at 40% complete would otherwise call it broken.
+    var settingsFooter: String {
+        switch self {
+        case .off:
+            "Pure pack RNG. Every card has its normal odds, duplicates and all."
+        case .normal:
+            "Once a set passes 60% complete, packs lean toward cards you haven't pulled yet, scaling up to 4× by 100%."
+        case .strong:
+            "Leans toward missing cards from 35% complete, and harder than Normal, up to about 6×. Finishes sets faster, but pulls drift further from the real product."
+        }
+    }
+}
+
 /// Pre-generates a pack and starts downloading its card images so the
 /// reveal phase can begin as soon as the user finishes the rip gesture.
 ///
@@ -12,30 +63,16 @@ import SwiftData
 final class PackPrefetcher {
     static let shared = PackPrefetcher()
 
-    /// Set-completion percentage at which the unowned-card bias starts to
-    /// ramp in. Below this, picks are uniform — early packs feel like
-    /// authentic RNG. Above it, the per-pick weight for owned cards
-    /// scales linearly down to `lateGameOwnedWeight` at 100% completion.
-    static let biasStartCompletion: Double = 0.60
-
-    /// Per-pick weight for owned cards once the set is 100% complete
-    /// (i.e., the floor of the scaling curve; in practice never applied
-    /// because at 100% there are no unowned cards). At 0.25 the late-
-    /// game ratio is 4× — an unowned card is up to 4× as likely as an
-    /// equivalent owned card per slot, scaling smoothly from 1× at the
-    /// bias threshold.
-    static let lateGameOwnedWeight: Double = 0.25
-
-    /// Computes the per-pick weight for owned cards given a set's
-    /// completion percentage. Linear ramp from 1.0 at `biasStartCompletion`
-    /// to `lateGameOwnedWeight` at 100%; flat 1.0 (no bias) below the
-    /// threshold. Clamped so callers don't have to worry about invariant
-    /// breakage if `ownedCount > totalCount` due to stale data.
-    static func ownedWeight(forCompletion completion: Double) -> Double {
+    /// Per-pick weight for owned cards at a given set completion. Linear ramp
+    /// from 1.0 at the level's `startCompletion` to its `ownedFloor` at 100%;
+    /// flat 1.0 below the threshold. Clamped so callers don't have to worry
+    /// about `ownedCount > totalCount` from stale data.
+    static func ownedWeight(forCompletion completion: Double, bias: UnownedBias = .normal) -> Double {
+        guard bias.isEnabled else { return 1.0 }
         let c = max(0, min(1.0, completion))
-        guard c > biasStartCompletion else { return 1.0 }
-        let progress = (c - biasStartCompletion) / (1.0 - biasStartCompletion)
-        return 1.0 - progress * (1.0 - lateGameOwnedWeight)
+        guard c > bias.startCompletion else { return 1.0 }
+        let progress = (c - bias.startCompletion) / (1.0 - bias.startCompletion)
+        return 1.0 - progress * (1.0 - bias.ownedFloor)
     }
 
     struct Prefetched {
@@ -63,14 +100,14 @@ final class PackPrefetcher {
     /// `ownedCardIDs` enables per-pick weighting toward cards the user
     /// hasn't pulled yet (see `ownedCardSelectionWeight`). Pass an empty
     /// set to disable the bias — generation falls back to uniform sampling.
-    /// `biasUnownedCards` is the user-facing toggle (Settings → Gameplay):
-    /// when false, generation runs uniformly regardless of `ownedCardIDs`.
+    /// `bias` is the user-facing level (Settings → Gameplay):
+    /// at `.off`, generation runs uniformly regardless of `ownedCardIDs`.
     func prefetch(
         set: SetModel,
         cards: [CardModel],
         modelContext: ModelContext,
         ownedCardIDs: Set<String> = [],
-        biasUnownedCards: Bool = true
+        bias: UnownedBias = .normal
     ) {
         if let pending, pending.setID == set.apiID {
             PackTiming.mark("prefetch: already pending for \(set.apiID)")
@@ -84,7 +121,7 @@ final class PackPrefetcher {
             cards: cards,
             modelContext: modelContext,
             ownedCardIDs: ownedCardIDs,
-            biasUnownedCards: biasUnownedCards
+            bias: bias
         )
         PackTiming.mark("prefetch: generate done (\(pulled.count) cards)")
         guard !pulled.isEmpty else { return }
@@ -178,15 +215,14 @@ final class PackPrefetcher {
     ///
     /// `ownedCardIDs` weights selection toward unowned cards on a curve
     /// that scales with set completion — see `ownedWeight(forCompletion:)`.
-    /// Empty set = uniform sampling. `biasUnownedCards` is the user-facing
-    /// toggle: when false, weighting is forced uniform regardless of
-    /// `ownedCardIDs`.
+    /// Empty set = uniform sampling. `bias` is the user-facing level; at `.off`
+    /// weighting is forced uniform regardless of `ownedCardIDs`.
     static func generate(
         set: SetModel,
         cards: [CardModel],
         modelContext: ModelContext,
         ownedCardIDs: Set<String> = [],
-        biasUnownedCards: Bool = true
+        bias: UnownedBias = .normal
     ) -> ([PulledCard], Bool) {
         guard !cards.isEmpty else { return ([], false) }
 
@@ -196,7 +232,7 @@ final class PackPrefetcher {
 
         let cardsByRarity = Dictionary(grouping: cards) { $0.rarity }
         let completion = Double(ownedCardIDs.count) / Double(cards.count)
-        let ownedWeight = biasUnownedCards ? Self.ownedWeight(forCompletion: completion) : 1.0
+        let ownedWeight = Self.ownedWeight(forCompletion: completion, bias: bias)
 
         // Two-pass to keep `isNew` computation off the main-thread hot path:
         // Pass 1 picks the cards purely from in-memory rarity pools (no

@@ -491,7 +491,7 @@ struct RipPackButton: View {
                     cards: cards,
                     modelContext: modelContext,
                     ownedCardIDs: collectionStats.ownedCardIDs(forSet: set.apiID),
-                    biasUnownedCards: appState.unownedCardBiasEnabled
+                    bias: appState.unownedBias
                 )
                 showPackOpening = true
             } label: {

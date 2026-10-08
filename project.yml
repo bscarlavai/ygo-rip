@@ -20,6 +20,19 @@ packages:
     url: https://github.com/RevenueCat/purchases-ios-spm.git
     from: "5.0.0"
 
+  # Drag-to-tear pack opening, shared with poke-rip.
+  #
+  # SSH, not HTTPS: the repo is private, and SwiftPM over HTTPS prompts for a GitHub username, which
+  # fails outright in a non-interactive build. Any machine or CI runner building this needs an SSH
+  # key on the account.
+  #
+  # Pinned exactly — a floating dependency means the pack-opening animation can change under a build
+  # nobody touched. Its own tests do NOT run with `xcodebuild test` here; a package test target is
+  # invisible to an app scheme. Run them at the source: `cd ../pack-tear && swift test`.
+  PackTear:
+    url: git@github.com:bscarlavai/pack-tear.git
+    exactVersion: 1.1.1
+
 targets:
   YGORip:
     type: application
@@ -27,6 +40,8 @@ targets:
     dependencies:
       - package: RevenueCat
         product: RevenueCat
+      - package: PackTear
+        product: PackTear
     sources:
       - path: YGORip
         excludes:
@@ -69,6 +84,10 @@ targets:
       storeKitConfiguration: YGORip/Resources/YGORip.storekit
       testTargets:
         - YGORipTests
+        # Real-touch coverage of the pack rip (both styles) plus screenshot captures of the
+        # screens this suite reaches. Needs free packs on the simulator: out of packs, the pack
+        # tests SKIP and xcodebuild still prints TEST SUCCEEDED, so read the skip messages.
+        - YGORipUITests
 
   YGORipTests:
     type: bundle.unit-test
@@ -80,3 +99,16 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+
+  YGORipUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: YGORipUITests
+    dependencies:
+      - target: YGORip
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.lavailabs.ygorip.uitests
+        TEST_TARGET_NAME: YGORip

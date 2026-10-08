@@ -50,6 +50,38 @@ final class AppState {
         didSet { UserDefaults.standard.set(unownedCardBiasEnabled, forKey: "unownedCardBiasEnabled") }
     }
 
+    var unownedCardBiasStrong: Bool {
+        didSet { UserDefaults.standard.set(unownedCardBiasStrong, forKey: "unownedCardBiasStrong") }
+    }
+
+    /// The Gameplay picker (Off / Normal / Strong), bridged over the two
+    /// booleans above rather than stored as its own key — same trick as Card
+    /// Motion. `unownedCardBiasEnabled` already exists on every install, so
+    /// every current user stays on exactly the setting they chose.
+    var unownedBias: UnownedBias {
+        get {
+            guard unownedCardBiasEnabled else { return .off }
+            return unownedCardBiasStrong ? .strong : .normal
+        }
+        set {
+            unownedCardBiasEnabled = newValue.isEnabled
+            // Not cleared when switching to .off, so toggling back on returns
+            // the user to the level they picked.
+            if newValue.isEnabled { unownedCardBiasStrong = (newValue == .strong) }
+        }
+    }
+
+    /// Classic (swipe-to-split) or Dynamic (PackTear drag-to-tear). Stored as
+    /// the raw string so a third mode wouldn't need another bridge.
+    var ripMode: RipMode {
+        didSet { UserDefaults.standard.set(ripMode.rawValue, forKey: "ripMode") }
+    }
+
+    /// Whether the one-time "Prefer a simpler rip?" pointer has been shown.
+    var hasSeenRipStyleHint: Bool {
+        didSet { UserDefaults.standard.set(hasSeenRipStyleHint, forKey: "hasSeenRipStyleHint") }
+    }
+
     /// Playback volume for in-app sound effects (card-swipe sound, etc.).
     /// 0 = effectively off (service short-circuits before playing).
     /// Independent of the iOS Silent switch — those interactions are
@@ -134,16 +166,44 @@ final class AppState {
         self.idleHoloShimmerEnabled = UserDefaults.standard.object(forKey: "idleHoloShimmerEnabled") as? Bool ?? true
         self.notificationsEnabled = UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool ?? true
         self.unownedCardBiasEnabled = UserDefaults.standard.object(forKey: "unownedCardBiasEnabled") as? Bool ?? true
-        // Shipped in 1.0.3 (was 0 with a DEBUG-only slider, so release users
+        // Shipped in 1.0.8 (was 0 with a DEBUG-only slider, so release users
         // never heard anything). Only applies to users who never set the
         // slider; anyone who did keeps their stored value.
         self.soundEffectsVolume = UserDefaults.standard.object(forKey: "soundEffectsVolume") as? Float ?? 0.25
         self.backgroundMusicVolume = UserDefaults.standard.object(forKey: "backgroundMusicVolume") as? Float ?? 0.25
-        self.hasOpenedFirstPack = UserDefaults.standard.bool(forKey: "hasOpenedFirstPack")
+        let hasOpenedFirstPack = UserDefaults.standard.bool(forKey: "hasOpenedFirstPack")
+        self.hasOpenedFirstPack = hasOpenedFirstPack
+        // Absent for every install predating the picker, so existing users land
+        // on Normal — the exact behaviour they already had.
+        self.unownedCardBiasStrong = UserDefaults.standard.object(forKey: "unownedCardBiasStrong") as? Bool ?? false
+        self.ripMode = Self.resolveRipMode(hasOpenedFirstPack: hasOpenedFirstPack)
+        self.hasSeenRipStyleHint = UserDefaults.standard.bool(forKey: "hasSeenRipStyleHint")
         self.crossPromoSeenApps = Set(UserDefaults.standard.stringArray(forKey: "crossPromoSeenApps") ?? [])
 
         // Calculate packs earned while away
         regenPacks()
+    }
+
+    /// Dynamic for new players; Classic for anyone who opened a pack before
+    /// the setting existed (1.0.8), since swipe-to-split is the only rip
+    /// they've known. Deliberately unlike poke-rip, which moved everyone.
+    ///
+    /// Written back the first time it's resolved: otherwise a new player's
+    /// first pack would flip `hasOpenedFirstPack` and re-resolve them to
+    /// Classic on the next launch.
+    private static func resolveRipMode(hasOpenedFirstPack: Bool) -> RipMode {
+        if let stored = UserDefaults.standard.string(forKey: "ripMode").flatMap(RipMode.init(rawValue:)) {
+            return stored
+        }
+        let mode: RipMode = hasOpenedFirstPack ? .classic : .dynamic
+        UserDefaults.standard.set(mode.rawValue, forKey: "ripMode")
+        // Existing players get no "Prefer a simpler rip?" pointer: they're on
+        // Classic, and one who switches to Dynamic on purpose shouldn't be
+        // pointed straight back. (Read in init right after this, so it applies.)
+        if hasOpenedFirstPack {
+            UserDefaults.standard.set(true, forKey: "hasSeenRipStyleHint")
+        }
+        return mode
     }
 
     // MARK: - Collection Reset

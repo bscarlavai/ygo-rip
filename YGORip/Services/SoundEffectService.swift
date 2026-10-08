@@ -21,6 +21,7 @@ final class SoundEffectService {
     /// Resources/Audio/ to ship a new one.
     enum Effect: String {
         case swipe   // Card swipe in pack reveal phase.
+        case tear    // Wrapper rip, fired on the .sealed -> .ripping transition.
     }
 
     private var players: [Effect: AVAudioPlayer] = [:]

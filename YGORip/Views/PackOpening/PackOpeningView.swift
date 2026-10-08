@@ -1,3 +1,4 @@
+import PackTear
 import SwiftUI
 import SwiftData
 
@@ -36,11 +37,25 @@ struct PackOpeningView: View {
 
     // Sealed phase animation state
     @State private var packBreathing = false
+    /// 0 = sealed, 1 = torn. PackTear owns the animation now; this remains as the phase latch that
+    /// the hint text and `resetForNewPack` read.
+    @State private var ripSplit: CGFloat = 0
+    /// Seeds the torn edge. Re-rolled per pack so no two tears are identical.
+    @State private var ripSeed: Int = Int.random(in: 0...10000)
+
+    // Classic rip state. Unused in `.dynamic` — PackTear owns all of this —
+    // but kept as plain `@State` rather than conditionally declared, because
+    // SwiftUI has no way to declare state per branch and the cost is four
+    // inert values.
     @State private var dragOffset: CGFloat = 0
     @State private var isDragging = false
-    @State private var ripSplit: CGFloat = 0  // 0 = sealed, 1 = fully split
-    @State private var ripFraction: CGFloat = 0.5  // where on the pack to split (0 = top, 1 = bottom)
-    @State private var ripSeed: Int = Int.random(in: 0...10000)  // unique jagged pattern per rip
+    /// Where along the pack the split happens, 0 = top. Taken from where the
+    /// swipe *started* vertically, so the pack tears near your thumb.
+    @State private var ripFraction: CGFloat = 0.5
+    @State private var packSize: CGSize = .zero
+    /// Latched when the sealed phase appears, so the hint can't be removed by
+    /// the act of marking it seen. Reset per pack alongside everything else.
+    @State private var hintRipStyleThisPack = false
 
     // Card reveal swipe state
     @State private var cardSwipeOffset: CGFloat = 0
@@ -145,23 +160,23 @@ struct PackOpeningView: View {
                         .transition(.opacity)
                 }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                // "Reveal All" — visible only mid-reveal.
-                if phase == .reveal && currentIndex < pulledCards.count - 1 {
-                    Button { revealAll() } label: {
-                        Text("Reveal All")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(Capsule().fill(.white.opacity(0.15)))
-                            .overlay(Capsule().stroke(.white.opacity(0.25), lineWidth: 0.5))
-                            .contentShape(Capsule())
-                    }
-                    .padding(.horizontal, 32)
-                    .padding(.bottom, 24)
+            .overlay(alignment: .bottom) {
+                // Either trigger shows the same control. The struggle case is
+                // deliberately not gated by `hasSeenRipStyleHint` — someone
+                // fighting the gesture twenty packs later still deserves the
+                // way out, even if they were shown the pointer once on pack
+                // two.
+                if showsClassicRipOffer {
+                    // No extra bottom padding: the overlay is applied before
+                    // `safeAreaInset`, so its bottom anchor already sits above
+                    // the bar. Adding the bar height on top lifted the capsule
+                    // onto the bottom of the pack.
+                    classicRipOffer
+                        .padding(.bottom, 6)
                 }
             }
+            .animation(.easeInOut(duration: 0.25), value: showsClassicRipOffer)
+            .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
         .sensoryFeedback(.impact(weight: .light), trigger: hapticLight, condition: { _, _ in appState.hapticsEnabled })
         .sensoryFeedback(.impact(weight: .medium), trigger: hapticMedium, condition: { _, _ in appState.hapticsEnabled })
         .sensoryFeedback(.impact(weight: .heavy), trigger: hapticHeavy, condition: { _, _ in appState.hapticsEnabled })
@@ -196,7 +211,7 @@ struct PackOpeningView: View {
                         cards: cards,
                         modelContext: modelContext,
                         ownedCardIDs: collectionStats.ownedCardIDs(forSet: set.apiID),
-                        biasUnownedCards: appState.unownedCardBiasEnabled
+                        bias: appState.unownedBias
                     )
                 }
             }
@@ -218,77 +233,257 @@ struct PackOpeningView: View {
 
     // MARK: - Phase 1: Sealed Pack
 
-    @State private var packSize: CGSize = .zero
+    /// The wrapper, flattened for PackTear.
+    ///
+    /// `PackTearView` tears a texture, and `FoilPackView` is a SwiftUI composition — so it gets
+    /// rasterised once. Nothing is lost: `CachedPackBody` is already a static composition that
+    /// SwiftUI rasterises and caches anyway.
+    @State private var wrapperImage: UIImage?
+    /// The card back, rendered flat so PackTear can show it *under* the wrapper.
+    @State private var cardBackImage: UIImage?
+    /// Pieces of wrapper torn off without opening the pack.
+    @State private var wrapperPieces = 0
+    /// Drags that meant to tear and didn't. Drives the hint, and is reset per
+    /// pack alongside `wrapperPieces`.
+    @State private var failedTears = 0
+
+    /// The width a card settles at — the flip, the reveal, everything after the wrapper is gone.
+    ///
+    /// One constant, three call sites. The card back inside the foil, the flip, and the reveal all
+    /// derive from it, so there is nothing to keep in sync and nothing to jump between.
+    private static let cardWidth: CGFloat = 380
+
+    private var cardWidth: CGFloat {
+        min(Self.cardWidth, UIScreen.main.bounds.width - Theme.spacingMD * 2)
+    }
+
+
+
+    /// The bar under every phase.
+    ///
+    /// **Always occupies the same height**, whether or not anything is in it. It used to appear only
+    /// during the reveal, and a `safeAreaInset` that materialises mid-sequence shrinks the content
+    /// area — so the card, having just settled from the tear and flipped, jumped upward a third
+    /// time. Reserving the space means the card lands once and stays there.
+    private var bottomBar: some View {
+        ZStack {
+            Button { revealAll() } label: {
+                Text("Reveal All")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Capsule().fill(.white.opacity(0.15)))
+                    .overlay(Capsule().stroke(.white.opacity(0.25), lineWidth: 0.5))
+                    .contentShape(Capsule())
+            }
+            .padding(.horizontal, 32)
+            .opacity(showsRevealAll ? 1 : 0)
+            .allowsHitTesting(showsRevealAll)
+
+            if phase == .sealed { hint }
+        }
+        .frame(height: reservesBottomBar ? Self.bottomBarHeight : 0)
+        .padding(.bottom, reservesBottomBar ? 24 : 0)
+        .animation(.easeInOut(duration: 0.2), value: showsRevealAll)
+        .clipped()
+    }
+
+    /// Which phases hold the bar's space open.
+    ///
+    /// Sealed, ripping and reveal, because the card must not move between them — a `safeAreaInset`
+    /// that appears partway through shrinks the content area and shoves everything above it upward.
+    ///
+    /// **Summary is excluded**, and that is not an oversight. It is a scrolling page with its own
+    /// buttons; reserving 76pt at the bottom of it for a control it never shows pushed its content
+    /// up and made it scroll when it did not before.
+    private var reservesBottomBar: Bool {
+        phase == .sealed || phase == .ripping || phase == .reveal
+    }
+
+    /// Tall enough for the Reveal All capsule, which is the tallest thing that goes here.
+    private static let bottomBarHeight: CGFloat = 52
+
+    /// Whether the Classic-rip capsule is on screen.
+    ///
+    /// Rendered as a root overlay rather than inside `bottomBar`, because that
+    /// bar is a `safeAreaInset` — growing it to fit the capsule shrank the
+    /// content area, and the pack shrank with it while PackTear's card-back
+    /// contents stayed sized to `cardWidth`, so the card poked out the right
+    /// edge of the wrapper. Overlays do not propagate their size to the host
+    /// (see `body`), so this cannot move the pack.
+    private var showsClassicRipOffer: Bool {
+        phase == .sealed
+            && preloadedPack != nil
+            && (shouldOfferClassicRip || hintRipStyleThisPack)
+    }
+
+    private var showsRevealAll: Bool {
+        phase == .reveal && currentIndex < pulledCards.count - 1 && !showDarkBackdrop
+    }
 
     private var sealedPhase: some View {
-        VStack {
-            Spacer()
+        VStack(spacing: 0) {
+            // The SAME geometry the flip uses, so the card back does not move when the wrapper
+            // hands off to it. Matching two hand-tuned stacks by eye is how it drifted in the first
+            // place; sharing the numbers is the only version that stays fixed.
+            packSurface
+                .aspectRatio(FoilPackView.aspectRatio, contentMode: .fit)
+                .frame(maxWidth: 480)
+                // Same vertical CENTRE as the flip container, which is what stops the card moving
+                // at the handoff — a stack's centre shifts by (top − bottom) / 2, and 20/10 gives
+                // the same +5 as the flip's 50/40. Copying the flip's actual numbers also copied
+                // its margins, and the pack lost width it did not need to lose.
+                .padding(.top, 20)
+                .padding(.bottom, 10)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            packBreathing = true
+            // Decided once, here, so marking it seen later can't retract it
+            // mid-pack. See `shouldHintRipStyle`.
+            hintRipStyleThisPack = shouldHintRipStyle
+            renderWrapperIfNeeded()
+        }
+        .task { await generateAndPreload() }
+    }
 
-            // Pack with rip-split effect
-            ZStack {
-                // Overlap: extend each mask 10pt past split line so jagged edges cover the seam
-                let overlap: CGFloat = 10
-                let topH = packSize.height > 0 ? packSize.height * ripFraction + overlap : 10000
-                let bottomH = packSize.height > 0 ? packSize.height * (1 - ripFraction) + overlap : 10000
+    /// The pack itself — tearable once the cards behind it exist.
+    ///
+    /// Before the pull is preloaded this is a plain `FoilPackView` with no gesture attached. That
+    /// ordering is deliberate: a pack that tears open before its contents are ready would either
+    /// stall on a blank screen or have to un-tear, and both read as a broken app. The old swipe
+    /// guarded the same way with `preloadedPack != nil` inside the gesture.
+    @ViewBuilder
+    private var packSurface: some View {
+        if appState.ripMode == .classic {
+            classicPackSurface
+        } else if let wrapperImage, preloadedPack != nil {
+            PackTearView(
+                image: wrapperImage,
+                // Already on screen behind the wrapper, so when the tear finishes the flip picks up
+                // the same card back rather than cutting to it.
+                contents: cardBackImage,
+                // Seeded from the pack's own identity, so a given pack always tears the same way
+                // and two packs in a row never tear alike.
+                seed: UInt64(bitPattern: Int64(ripSeed)),
+                style: tearStyle,
+                onTearBegan: {
+                    // Shown once means shown for one whole pack: marked when
+                    // the pack is actually opened, not when the hint renders.
+                    if hintRipStyleThisPack { appState.hasSeenRipStyleHint = true }
+                    // The frame the gesture commits: sound and haptic land together with the tear.
+                    PackTiming.mark("tear: rip gesture committed")
+                    hapticMedium += 1
+                    SoundEffectService.shared.play(.tear)
+                    ripSplit = 1
+                },
+                // A snap per ~20pt of drag, so the tear is felt the whole way across rather than
+                // only at the moment it commits. Distance-based, so a slow drag and a fast one
+                // deliver the same number.
+                onTearTick: { hapticLight += 1 },
+                // A loop, a U at one edge or a corner cut takes a piece off and leaves the pack
+                // sealed. It is a deliberate act that produced no card, so it gets a warning
+                // haptic and the hint changes rather than silently repeating the instruction.
+                onHolePunched: {
+                    wrapperPieces += 1
+                    hapticMedium += 1
+                },
+                // A real attempt that didn't open the pack. Light haptic plus a
+                // changed hint, so the drag is acknowledged instead of ignored
+                // — the silence here is what got reported as the pack being
+                // hard to open.
+                onTearFailed: {
+                    failedTears += 1
+                    hapticLight += 1
+                },
+                // Driven by the animation finishing, NOT by a fixed sleep.
+                //
+                // The old swipe split the pack over 350ms and called ripPack() at 400ms, just after
+                // it landed. PackTear's peel runs about twice that, so the fixed delay cut the
+                // animation off part-way through and switched to the flip — which is exactly what
+                // "you don't get to see the full animation" was.
+                onTorn: { ripPack() }
+            )
+            // Fresh scene per pack, explicitly.
+            //
+            // The scene holds the wrapper's accumulated holes and the list of openings a tear may
+            // start from. Switching branches on `preloadedPack` *should* already tear the view down
+            // between packs, but "should" is doing a lot of work there — and the failure mode is a
+            // new pack arriving pre-torn. `ripSeed` is re-rolled in `openAnother`.
+            .id(ripSeed)
+        } else {
+            FoilPackView(set: set, palette: palette)
+                .scaleEffect(packBreathing ? 1.02 : 1.0)
+                .animation(
+                    .easeInOut(duration: 2.0).repeatForever(autoreverses: true),
+                    value: packBreathing)
+        }
+    }
 
-                // Top half — jagged bottom edge
-                FoilPackView(set: set, palette: palette)
-                    .mask(alignment: .top) {
-                        TornEdge(side: .topHalf, seed: ripSeed)
-                            .frame(height: topH)
-                    }
-                    .offset(y: -packSize.height * ripFraction * ripSplit * 0.8)
-                    .rotationEffect(.degrees(-ripSplit * 5), anchor: .bottom)
-                    .opacity(1 - ripSplit)
+    /// The classic rip: the pack splits in two wherever you swipe. YGORip's
+    /// only rip before 1.0.8, kept as-is so it's the geometry players remember
+    /// — two masked halves with interlocking
+    /// `TornEdge` seams sharing a seed, sliding apart and fading out.
+    ///
+    /// Why anyone wants it back: direction and distance are the only inputs.
+    /// There is no wrong place to swipe, so it cannot half-tear or take a
+    /// corner off, which is what the reports about the new rip were about.
+    ///
+    /// Guarded on `preloadedPack` exactly as the dynamic path is — a pack that
+    /// opens before its contents exist either stalls on a blank screen or has
+    /// to un-tear.
+    @ViewBuilder
+    private var classicPackSurface: some View {
+        ZStack {
+            // Each mask runs 10pt past the split line so the jagged edges
+            // overlap and cover the seam while the pack is still sealed.
+            let overlap: CGFloat = 10
+            let topH = packSize.height > 0 ? packSize.height * ripFraction + overlap : 10_000
+            let bottomH = packSize.height > 0 ? packSize.height * (1 - ripFraction) + overlap : 10_000
 
-                // Bottom half — jagged top edge (same seed = interlocking)
-                FoilPackView(set: set, palette: palette)
-                    .mask(alignment: .bottom) {
-                        TornEdge(side: .bottomHalf, seed: ripSeed)
-                            .frame(height: bottomH)
-                    }
-                    .offset(y: packSize.height * (1 - ripFraction) * ripSplit * 0.8)
-                    .rotationEffect(.degrees(ripSplit * 5), anchor: .top)
-                    .opacity(1 - ripSplit)
-            }
-            .offset(x: dragOffset)
-            .rotationEffect(.degrees(dragOffset * 0.03))
-            .scaleEffect(packBreathing && ripSplit == 0 ? 1.02 : 1.0)
-            .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: packBreathing)
-            .background {
-                GeometryReader { geo in
-                    Color.clear.onAppear { packSize = geo.size }
+            // Top half — jagged bottom edge.
+            //
+            // `mask` with an explicitly-sized TornEdge, *not* a frame on the
+            // pack. Constraining the pack's own height resizes it instead of
+            // cropping it, and because `packSize` is measured from that same
+            // view the result oscillates: measure, shrink, re-measure, shrink.
+            FoilPackView(set: set, palette: palette)
+                .mask(alignment: .top) {
+                    TornEdge(side: .topHalf, seed: ripSeed)
+                        .frame(height: topH)
                 }
-            }
-            .aspectRatio(FoilPackView.aspectRatio, contentMode: .fit)
-            .frame(maxWidth: 480)
-            .padding(.horizontal, Theme.spacingMD)
+                .offset(y: -packSize.height * ripFraction * ripSplit * 0.8)
+                .rotationEffect(.degrees(-ripSplit * 5), anchor: .bottom)
+                .opacity(1 - ripSplit)
 
-            Spacer()
-
-            // Hint text
-            if ripSplit > 0 {
-                Color.clear.frame(height: 60)
-            } else if preloadedPack != nil {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.left")
-                    Text("Swipe to rip")
-                    Image(systemName: "arrow.right")
+            // Bottom half — same seed, so the two edges interlock.
+            FoilPackView(set: set, palette: palette)
+                .mask(alignment: .bottom) {
+                    TornEdge(side: .bottomHalf, seed: ripSeed)
+                        .frame(height: bottomH)
                 }
-                .font(.subheadline)
-                .foregroundStyle(Theme.secondaryText)
-                .opacity(isDragging ? 0 : 0.6)
-                .padding(.bottom, 60)
-            } else {
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .tint(Theme.secondaryText)
-                        .scaleEffect(0.8)
-                    Text("Preparing pack...")
-                }
-                .font(.subheadline)
-                .foregroundStyle(Theme.tertiaryText)
-                .padding(.bottom, 60)
+                .offset(y: packSize.height * (1 - ripFraction) * ripSplit * 0.8)
+                .rotationEffect(.degrees(ripSplit * 5), anchor: .top)
+                .opacity(1 - ripSplit)
+        }
+        .offset(x: dragOffset)
+        .rotationEffect(.degrees(dragOffset * 0.03))
+        .scaleEffect(packBreathing && ripSplit == 0 ? 1.02 : 1.0)
+        .animation(
+            .easeInOut(duration: 2.0).repeatForever(autoreverses: true),
+            value: packBreathing)
+        // `onAppear` only. The height this measures is the height it feeds, so
+        // re-measuring on every change is a feedback loop — the pack pulses
+        // between tiny and wrong instead of settling. One read of the
+        // unconstrained size is all this needs.
+        //
+        // No `aspectRatio` or `maxWidth` here: `sealedPhase` applies both to
+        // `packSurface`, and that is also what gives this a stable size to
+        // measure in the first place.
+        .background {
+            GeometryReader { geo in
+                Color.clear.onAppear { packSize = geo.size }
             }
         }
         .contentShape(Rectangle())
@@ -298,36 +493,219 @@ struct PackOpeningView: View {
                     guard preloadedPack != nil, ripSplit == 0 else { return }
                     isDragging = true
                     dragOffset = value.translation.width * 0.5
-
-                    // Screen Y percentage = pack rip percentage
                     let screenHeight = UIScreen.main.bounds.height
                     if screenHeight > 0 {
-                        ripFraction = (value.startLocation.y / screenHeight).clamped(to: 0.15...0.85)
+                        ripFraction = min(max(value.startLocation.y / screenHeight, 0.15), 0.85)
                     }
                 }
                 .onEnded { value in
                     guard preloadedPack != nil, ripSplit == 0 else { return }
+                    // Generous on purpose: either a decent swipe or a fast
+                    // flick opens it. Classic exists to be the rip that can't
+                    // be done wrong.
                     let threshold: CGFloat = 80
-                    if abs(value.translation.width) > threshold || abs(value.predictedEndTranslation.width) > 400 {
-                        hapticMedium += 1
-                        withAnimation(.easeOut(duration: 0.35)) {
-                            ripSplit = 1
-                            dragOffset = 0
-                        }
-                        Task {
-                            try? await Task.sleep(for: .milliseconds(400))
-                            ripPack()
-                        }
-                    } else {
+                    let committed = abs(value.translation.width) > threshold
+                        || abs(value.predictedEndTranslation.width) > 400
+                    guard committed else {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
                             dragOffset = 0
                             isDragging = false
                         }
+                        return
+                    }
+                    if hintRipStyleThisPack { appState.hasSeenRipStyleHint = true }
+                    PackTiming.mark("swipe: rip gesture committed")
+                    hapticMedium += 1
+                    // On the committing frame, not in ripPack() — that runs
+                    // 400ms later, by which point the 350ms split has already
+                    // finished and the sound lands after the animation.
+                    SoundEffectService.shared.play(.tear)
+                    withAnimation(.easeOut(duration: 0.35)) {
+                        ripSplit = 1
+                        dragOffset = 0
+                    }
+                    Task {
+                        // Matches the 350ms split with a beat to settle. The
+                        // dynamic path can't use a fixed delay — its peel runs
+                        // about twice as long — but here the animation length
+                        // is ours and known.
+                        try? await Task.sleep(for: .milliseconds(400))
+                        ripPack()
                     }
                 }
         )
-        .onAppear { packBreathing = true }
-        .task { await generateAndPreload() }
+    }
+
+    private var tearStyle: PackTearStyle {
+        var style = PackTearStyle()
+        style.lightColor = UIColor(palette.highlight)  // the set's signature color (decision #5)
+        style.tearRimColor = UIColor(white: 1, alpha: 0.85)
+        // The pack is the whole screen here.
+        style.packWidthFraction = 0.92
+        style.packHeightFraction = 0.86
+        // Starts as a share of the wrapper — so it is always inside it, whatever size the wrapper
+        // ends up — and grows to exactly `cardWidth` as it comes out, over a beat longer than the
+        // peel so the two read as one motion rather than two events.
+        style.contentsWidthFraction = 0.8
+        style.contentsFinalWidth = cardWidth
+        style.contentsSettleDuration = 0.85
+        style.contentsRise = 34
+        return style
+    }
+
+    /// Acknowledges a torn-off piece rather than repeating the instruction.
+    ///
+    /// A player who has just cut a corner off knows they did something; being told again to drag
+    /// across the pack reads as the game not having noticed.
+    private var sealedHint: String {
+        if appState.ripMode == .classic {
+            return "Swipe to rip the pack open"
+        }
+        if wrapperPieces > 0 {
+            return "Still sealed — tear all the way across."
+        }
+        // A drag that didn't take is the one case that used to produce nothing
+        // at all: no tear, no piece, no word. Two users reported that silence
+        // as the pack being "hard" or "weird" to open, because the swipe this
+        // replaced always did something.
+        if failedTears > 0 {
+            return "Almost — drag right across the pack"
+        }
+        return "Drag across the pack to tear it open"
+    }
+
+    /// Whether to offer the classic rip inline.
+    ///
+    /// Settings-only would have been invisible to the people who need it:
+    /// someone fighting the gesture is not browsing preferences, they're
+    /// getting annoyed and closing the app. So the offer appears exactly where
+    /// the frustration is, and only after the pack has genuinely refused to
+    /// open several times — `failedTears` counts real committed drags that
+    /// didn't take, not idle touches.
+    ///
+    /// Three rather than one: a single miss is a learning moment, and the
+    /// forgiving gesture from 1.1.1 usually wins the second attempt. Offering
+    /// an escape hatch immediately would teach players to leave before the new
+    /// rip has had a fair chance.
+    private var shouldOfferClassicRip: Bool {
+        appState.ripMode == .dynamic && failedTears >= 3
+    }
+
+    /// The one-time pointer at the setting, for people who are *not* struggling.
+    ///
+    /// `shouldOfferClassicRip` only reaches players who visibly fail. Someone
+    /// who rips fine but would prefer Classic's feel never fails three tears,
+    /// so the reactive offer would never find them (learned in poke-rip).
+    ///
+    /// Not on the very first pack: that is the moment the app is selling
+    /// itself, and a settings pointer over it is noise. By the second an
+    /// opinion has formed, which is when the information is worth something.
+    /// `totalPacksOpened >= 1` means a new install's second pack. Existing
+    /// players never see it: they stay on Classic, and `AppState` marks the
+    /// hint seen for them so switching to Dynamic deliberately isn't followed
+    /// by a pointer back.
+    ///
+    /// Fires once per install and never again, whether or not they act on it.
+    ///
+    /// Evaluated once into `hintRipStyleThisPack` rather than read live. The
+    /// first version marked the flag from the view's own `onAppear`, which is
+    /// a condition that reads the state it writes: the hint appeared, set
+    /// `hasSeenRipStyleHint`, re-evaluated to false and removed itself in the
+    /// same frame. It never survived long enough to be seen.
+    private var shouldHintRipStyle: Bool {
+        appState.ripMode == .dynamic
+            && !appState.hasSeenRipStyleHint
+            && appState.totalPacksOpened >= 1
+    }
+
+    /// A tap-to-switch line under the hint. Switches immediately, mid-pack —
+    /// the pack is still sealed, so there is nothing to unwind, and making
+    /// someone finish a rip they can't perform to change how rips work would
+    /// be the wrong way round.
+    @ViewBuilder
+    private var classicRipOffer: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                appState.ripMode = .classic
+                // The classic path reads these, and a half-finished dynamic
+                // attempt must not leak into it.
+                dragOffset = 0
+                isDragging = false
+                ripFraction = 0.5
+            }
+            // Acting on it counts as having seen it, so the one-time pointer
+            // doesn't reappear later if they switch back to dynamic.
+            appState.hasSeenRipStyleHint = true
+            hapticLight += 1
+        } label: {
+            // Two audiences, two framings. Someone who has failed three tears
+            // is being offered a fix; someone on their second pack is being
+            // told an option exists. "Trouble opening?" aimed at a player who
+            // is not stuck reads as the app giving up on them.
+            //
+            // Neither says "the old rip": the players who see this are new
+            // installs that have never seen any other rip.
+            Text(shouldOfferClassicRip
+                 ? "Trouble opening? Switch to Classic"
+                 : "Prefer a simpler rip? Switch to Classic")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Theme.accent)
+                .padding(.horizontal, Theme.spacingMD)
+                .padding(.vertical, Theme.spacingSM)
+                .background(Theme.cardSurface.opacity(0.7), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+    }
+
+    @ViewBuilder
+    private var hint: some View {
+        if ripSplit > 0 {
+            Color.clear.frame(height: 60)
+        } else if preloadedPack != nil {
+            VStack(spacing: Theme.spacingSM) {
+                Text(sealedHint)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .opacity(0.6)
+                    .padding(.horizontal, 32)
+                    .animation(.easeInOut(duration: 0.2), value: sealedHint)
+
+            }
+        } else {
+            HStack(spacing: 6) {
+                ProgressView()
+                    .tint(Theme.secondaryText)
+                    .scaleEffect(0.8)
+                Text("Preparing pack...")
+            }
+            .font(.subheadline)
+            .foregroundStyle(Theme.tertiaryText)
+        }
+    }
+
+    /// Rasterises the wrapper once per pack.
+    ///
+    /// `ImageRenderer` walks and draws a whole SwiftUI hierarchy — far too expensive to call from
+    /// inside a `body`, which SwiftUI evaluates freely.
+    @MainActor
+    private func renderWrapperIfNeeded() {
+        guard wrapperImage == nil else { return }
+
+        let renderer = ImageRenderer(
+            content: FoilPackView(set: set, palette: palette)
+                .frame(width: 480, height: 480 / FoilPackView.aspectRatio))
+        renderer.scale = UIScreen.main.scale
+        renderer.isOpaque = false
+        wrapperImage = renderer.uiImage
+
+        // The same card back the flip uses, flattened so it can sit inside the wrapper.
+        let backRenderer = ImageRenderer(
+            content: CardBackView().frame(width: 400, height: 400 / 0.716))
+        backRenderer.scale = UIScreen.main.scale
+        backRenderer.isOpaque = false
+        cardBackImage = backRenderer.uiImage
     }
 
     // MARK: - Phase 2: Ripping
@@ -374,7 +752,7 @@ struct PackOpeningView: View {
             // the view tree updates mid-flight (e.g. CardBackView's 60Hz
             // foilMotion tick or the showingCardFront swap halfway through).
             .animation(.easeInOut(duration: 0.55), value: flipProgress)
-            .frame(maxWidth: 380)
+            .frame(maxWidth: Self.cardWidth)
             .padding(.horizontal, Theme.spacingMD)
             .padding(.top, 50)
             .padding(.bottom, 40)
@@ -513,6 +891,10 @@ struct PackOpeningView: View {
                 let card = pulledCards[currentIndex]
                 cardReveal(card)
                     .id(card.id) // Prevents SwiftUI from cross-fading badge state between cards
+                    // The third call site for the one card width. Without the cap this filled the
+                    // available width while the flip behind it was capped, so the card grew the
+                    // instant the flip finished.
+                    .frame(maxWidth: Self.cardWidth)
                     .scaleEffect(revealScale)
                     .offset(x: cardSwipeOffset)
                     .rotationEffect(.degrees(cardSwipeRotation))
@@ -857,7 +1239,7 @@ struct PackOpeningView: View {
                 cards: cards,
                 modelContext: modelContext,
                 ownedCardIDs: collectionStats.ownedCardIDs(forSet: set.apiID),
-                biasUnownedCards: appState.unownedCardBiasEnabled
+                bias: appState.unownedBias
             )
             guard !generated.isEmpty else { return }
             pulled = generated
@@ -1212,11 +1594,18 @@ struct PackOpeningView: View {
         hotPackStage = 0
         currentIndex = 0
         revealedCount = 0
-        dragOffset = 0
         ripSplit = 0
-        ripFraction = 0.5
         ripSeed = Int.random(in: 0...10000)
+        // Per-pack, like everything else here. Without this the hint from the last pack's torn-off
+        // corner greets you on a wrapper you have not touched.
+        wrapperPieces = 0
+        failedTears = 0
+        // Classic rip state. A leftover drag offset would otherwise hand the
+        // next pack a visible sideways nudge before it is touched.
+        dragOffset = 0
         isDragging = false
+        ripFraction = 0.5
+        hintRipStyleThisPack = false
         packBreathing = false
         cardSwipeOffset = 0
         cardSwipeRotation = 0

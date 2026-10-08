@@ -65,7 +65,7 @@ final class SetCompletionTests: XCTestCase {
             while owned != allIDs && packs < budget {
                 let (pulled, _) = PackPrefetcher.generate(
                     set: set, cards: cards, modelContext: context,
-                    ownedCardIDs: owned, biasUnownedCards: true
+                    ownedCardIDs: owned, bias: .normal
                 )
                 XCTAssertFalse(pulled.isEmpty, "[\(code)] generated an empty pack")
                 owned.formUnion(pulled.map(\.model.apiID))

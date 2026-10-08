@@ -217,18 +217,46 @@ struct SettingsView: View {
 
     // MARK: - Gameplay
 
+    /// A labelled segmented picker over every case of a setting enum, with an
+    /// optional inline footnote (for a second setting sharing one section footer).
+    private func segmentedSetting<T: CaseIterable & Hashable>(
+        _ title: String,
+        systemImage: String,
+        selection: Binding<T>,
+        label: @escaping (T) -> String,
+        footnote: String? = nil
+    ) -> some View where T.AllCases: RandomAccessCollection {
+        VStack(alignment: .leading, spacing: Theme.spacingSM) {
+            Label(title, systemImage: systemImage)
+            Picker(title, selection: selection) {
+                ForEach(Array(T.allCases), id: \.self) { option in
+                    Text(label(option)).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            if let footnote {
+                Text(footnote)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.tertiaryText)
+            }
+        }
+    }
+
     @ViewBuilder
     private var gameplaySection: some View {
         Section {
             @Bindable var state = appState
-            Toggle(isOn: $state.unownedCardBiasEnabled) {
-                Label("Favor Unpulled Cards", systemImage: "wand.and.stars")
-            }
+            segmentedSetting("Rip Style", systemImage: "hand.draw",
+                             selection: $state.ripMode, label: \.label,
+                             footnote: appState.ripMode.settingsFooter)
+            segmentedSetting("Favor Unpulled Cards", systemImage: "wand.and.stars",
+                             selection: $state.unownedBias, label: \.rawValue.capitalized)
         } header: {
             Text("Gameplay")
                 .foregroundStyle(Theme.secondaryText)
         } footer: {
-            Text("Once a set passes 60% complete, packs lean toward cards you haven't pulled yet — scaling up to 4× by 100%. Turn off for pure pack RNG.")
+            Text(appState.unownedBias.settingsFooter)
                 .foregroundStyle(Theme.tertiaryText)
         }
         .listRowBackground(Theme.cardSurface)
