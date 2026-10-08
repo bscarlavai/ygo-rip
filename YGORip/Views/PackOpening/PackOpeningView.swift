@@ -166,16 +166,23 @@ struct PackOpeningView: View {
                 // fighting the gesture twenty packs later still deserves the
                 // way out, even if they were shown the pointer once on pack
                 // two.
-                if showsClassicRipOffer {
-                    // No extra bottom padding: the overlay is applied before
-                    // `safeAreaInset`, so its bottom anchor already sits above
-                    // the bar. Adding the bar height on top lifted the capsule
-                    // onto the bottom of the pack.
-                    classicRipOffer
-                        .padding(.bottom, 6)
+                //
+                // The animation lives on this ZStack, not the root: at the root
+                // it also animated the phase overlay, so the deliberately
+                // instant sealed→ripping swap crossfaded whenever the offer had
+                // been visible.
+                ZStack {
+                    if showsClassicRipOffer {
+                        // No extra bottom padding: the overlay is applied before
+                        // `safeAreaInset`, so its bottom anchor already sits above
+                        // the bar. Adding the bar height on top lifted the capsule
+                        // onto the bottom of the pack.
+                        classicRipOffer
+                            .padding(.bottom, 6)
+                    }
                 }
+                .animation(.easeInOut(duration: 0.25), value: showsClassicRipOffer)
             }
-            .animation(.easeInOut(duration: 0.25), value: showsClassicRipOffer)
             .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
         .sensoryFeedback(.impact(weight: .light), trigger: hapticLight, condition: { _, _ in appState.hapticsEnabled })
         .sensoryFeedback(.impact(weight: .medium), trigger: hapticMedium, condition: { _, _ in appState.hapticsEnabled })
