@@ -133,7 +133,8 @@ you can now filter by set. Rarely traded cards now count toward
 your collection value using their lowest listing.
 
 FIXES
-Card images that fail to load now retry on their own, and card
+Fixed a crash some players hit while viewing foil cards. Card
+images that fail to load now retry on their own, and card
 corrections now reach sets you've already opened.
 ```
 
