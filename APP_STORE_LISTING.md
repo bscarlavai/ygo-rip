@@ -93,6 +93,50 @@ Requires iOS 18 or later.
 
 YuRip is an independent, unofficial fan project. It is not produced, endorsed, supported by, or affiliated with any trading card game publisher or rights-holder. All card names, artwork, set names, and related content are the property of their respective owners. Card images and metadata are sourced from a publicly available community API.
 
+## What's New (version history)
+
+Newest first. Same trademark posture as the Description above: no franchise
+wordmark, no publisher, no set names, since set names are third-party property
+per the disclaimer. Refer to a release as "the latest booster set". No emdashes
+(house style). Apple's limit is 4000 characters.
+
+### 1.0.8
+
+```
+NEW SETS
+The latest booster set is here, along with four more new
+products. A set that launched with only part of its card list
+now has every card.
+
+TWO WAYS TO RIP
+Choose your rip style in Settings: Classic splits the pack with a
+swipe, Dynamic tears it open along the line you draw. New players
+start on Dynamic; if you've been ripping already, nothing changes
+unless you switch.
+
+SOUND AND MUSIC
+Card sound effects and a background music track are now on for
+everyone. Music won't play over your own podcasts or songs, and
+you can adjust or mute either one in Settings.
+
+FAVOR UNPULLED CARDS, NOW WITH STRONG
+The setting that helps finish a set now has three levels: Off,
+Normal, and a new Strong that starts helping earlier.
+
+PACKS REFILL WHILE YOU WATCH
+When the countdown hit zero, your free pack didn't appear until
+you left the app and came back. It now shows up right on time.
+
+A BETTER COLLECTION
+Your collection remembers how you like to view and sort it, and
+you can now filter by set. Rarely traded cards now count toward
+your collection value using their lowest listing.
+
+FIXES
+Card images that fail to load now retry on their own, and card
+corrections now reach sets you've already opened.
+```
+
 ## TestFlight - Beta App Description
 YuRip is a booster pack opening simulator for a popular trading card game. Pick any set, rip a pack, flip cards with rarity-scaled animations, and track your collection. Era-accurate booster composition per set.
 
